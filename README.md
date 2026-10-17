@@ -82,6 +82,7 @@ into structured demand:
 | 🧱 | [08 Tech stack and architecture](docs/08_tech_stack_architecture.md) | Stack, data model, AI pipeline, matching algorithm, API, screens, offline plan |
 | 🗺️ | [09 Architecture diagrams](docs/09_architecture_diagrams.md) | Mermaid diagrams: system, workflow, matching, data model |
 | ⏱️ | [10 Hackathon plan](docs/10_hackathon_plan.md) | Prebuild list, hour-by-hour plan, must/don't, demo script, judge Q&A |
+| 📴 | [11 Offline infrastructure](docs/11_offline_infrastructure.md) | Works with no network: offline PWA, local "ReliefOS in a box" node, sync and radio roadmap |
 | 🧪 | [`prototype/match.py`](prototype/match.py) | Working LP matching engine on a Punjab sample |
 
 ### Pitched stack
