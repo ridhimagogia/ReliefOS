@@ -46,32 +46,65 @@ The event pitch says teams turn concepts into **working models**, so a strong pr
 
 ---
 
-## 👥 Roles
+## 🌐 Website or app? Decision: a responsive website (PWA)
 
-| Person | Owns | Done when |
-|---|---|---|
-| 🤖 **A: AI/NLP** | Extraction pipeline, prompts, gold set, evaluation | ≥ 85% field accuracy on the 150-message gold set |
-| ⚖️ **B: Matching** | Scoring, greedy, LP, vehicle assignment, simulation | Naive-vs-ReliefOS numbers reproducible with one command |
-| ⚙️ **C: Backend** | Flask API, DB, seed, Docker, routing client | `docker compose up` gives a working system |
-| 🖥️ **D: Frontend and pitch** | React screens, map, deck, demo script | One flawless 3-minute demo, recorded |
+| Option | Verdict |
+|---|---|
+| 🟢 **Responsive website built in React** | **Choose this.** It is what the deck pitched. Judges open a link, nothing to install, works on laptop and phone browsers |
+| 🟢 **PWA layer on top** (installable, offline queue) | Makes the same website behave like an app on a phone. Needed for the "limited connectivity" story. Small extra work |
+| 🔴 Native mobile app (React Native / Flutter) | Do not build now. Doubles the front-end work and adds nothing the judges score. Say "native app" is on the roadmap |
 
-Everyone reviews each other's PRs. Everyone can run the demo.
+Pitch wording: *"ReliefOS is a web platform for control rooms, with a mobile-friendly field form that works offline."*
+
+---
+
+## 👥 Work split by tech (4 people)
+
+Split by **technology area only**. Deployment, the demo script, the pitch and the PPT are **not** assigned here: they are done together near the end and can be divided then.
+
+| | Person | Tech area | Owns | Main tools |
+|---|---|---|---|---|
+| 🖥️ | **1. Frontend** | Everything the user sees | All React screens (map, intake, review queue, matching panel, shortages, needs board, KPIs), Leaflet map and markers/arrows, API client, loading/error states, responsive layout, PWA install + offline queue | React, Vite, Tailwind, Leaflet, IndexedDB |
+| ⚙️ | **2. Backend and database** | Server, data and API | Flask app, SQLAlchemy models and schema, all REST endpoints, CSV import for stock and fleet, seed script and scenario data loader, stock reservation, audit log, basic role login, local dev environment | Flask, SQLAlchemy, MySQL/SQLite, pytest |
+| 🤖 | **3. AI and extraction** | Messy input to structured data | Gemini prompts and JSON schema, OCR and photo handling, canonicaliser, location resolver, Sphere needs calculator, urgency rules, validator and confidence scores, cached responses, the 150-message gold set and accuracy evaluation | Gemini API, Tesseract, Pydantic, rapidfuzz |
+| ⚖️ | **4. Matching and geo** | Decision logic | Scoring function, greedy matcher, LP/OR-Tools optimiser, vehicle assignment, shortage and surplus analysis, distance and ETA service (OSRM with haversine fallback), simulation of naive vs ReliefOS, KPI calculations, unit tests of the algorithm | Python, SciPy/OR-Tools, OSRM, pytest |
+
+### 🔌 Contracts (agree on day 1, then work in parallel)
+
+Each person codes against an agreed JSON shape, using fake data until the real part is ready.
+
+| Boundary | Contract |
+|---|---|
+| **Frontend ↔ Backend** | OpenAPI-style list of endpoints in `docs/08` section 6; Backend publishes example responses first, Frontend starts with mock JSON |
+| **AI ↔ Backend** | `extract(text_or_image) -> DemandDraft {items[], location_text, lat, lng, beneficiaries, urgency, confidence, raw_text}`; Backend stores it as `PENDING_REVIEW` |
+| **Matching ↔ Backend** | `match(demands[], stock[], vehicles[], weights) -> recommendations[] {demand_id, stock_id, vehicle_id, qty, km, eta_h, score, reason}` |
+| **Matching ↔ Geo** | `distance(a, b) -> {km, eta_h, source}` inside Person 4's own area |
+
+### 🤝 Who leans on whom
+
+- **1 ↔ 2:** screens and endpoints. Daily sync for the first week.
+- **2 ↔ 3:** the report endpoint calls extraction. Agree the `DemandDraft` shape first.
+- **2 ↔ 4:** the match endpoint calls the matcher and saves recommendations.
+- **Load balance:** the frontend is the biggest area. Person 2 finishes the API early, then helps with data pages and the dashboard. Person 3 also owns the gold set, which is a big job.
+- Everyone reviews at least one other area's pull requests, and everyone should be able to run the whole system.
 
 ---
 
 ## 🗓️ Pre-build schedule (17-29 Oct)
 
+Person numbers refer to the [tech split](#-work-split-by-tech-4-people). Demo, pitch, deck and deployment are shared tasks, not part of the split.
+
 | Dates | Milestone | Who | Definition of done |
 |---|---|---|---|
-| **17-18** | 🧱 **Foundations.** Repo, branches, Docker Compose, DB schema, one-command seed. Decide: Flask, SQLite local / MySQL compose, greedy as default matcher, Punjab flood scenario | C + all | `docker compose up` shows an empty app and API health check |
-| **18-19** | 🗃️ **Data.** Punjab scenario: 8-12 depots, 15-25 camps, vehicles, stock. Sphere rates table. Start the 150-message gold set | C + A | Seed loads; map shows markers |
-| **19-21** | 🤖 **Extraction v1.** Gemini JSON-schema prompt, canonicaliser, Sphere fill, location resolver, validator | A | 10 messages parse correctly end-to-end |
-| **19-21** | ⚖️ **Matching v1.** Port `match.py` into the app. Scoring, greedy, reservation, shortage report | B | Problem-statement example (A/B/C blankets, kits, ORS) solved correctly in a unit test |
-| **19-22** | 🖥️ **UI skeleton.** Map with camps and depots, intake page, demand list | D | Paste text, see a record appear |
+| **17-18** | 🧱 **Foundations.** Repo, branches, Docker Compose, DB schema, one-command seed. Decide: Flask, SQLite local / MySQL compose, greedy as default matcher, Punjab flood scenario | 2 + all | `docker compose up` shows an empty app and API health check |
+| **18-19** | 🗃️ **Data.** Punjab scenario: 8-12 depots, 15-25 camps, vehicles, stock. Sphere rates table. Start the 150-message gold set | 2 + 3 | Seed loads; map shows markers |
+| **19-21** | 🤖 **Extraction v1.** Gemini JSON-schema prompt, canonicaliser, Sphere fill, location resolver, validator | 3 | 10 messages parse correctly end-to-end |
+| **19-21** | ⚖️ **Matching v1.** Port `match.py` into the app. Scoring, greedy, reservation, shortage report | 4 | Problem-statement example (A/B/C blankets, kits, ORS) solved correctly in a unit test |
+| **19-22** | 🖥️ **UI skeleton.** Map with camps and depots, intake page, demand list | 1 | Paste text, see a record appear |
 | **22-24** | 🔗 **Integrate.** Report → review queue → confirm → match → moves on map. Approve reserves stock | all | The "wow" flow works with no manual DB edits |
-| **23-25** | 📊 **Evidence.** Gold-set evaluation, simulation (naive nearest-stock vs ReliefOS), KPI panel, LP optimiser | A + B | Numbers on a slide, labelled "simulated" |
-| **24-26** | 🛟 **Resilience.** Cached Gemini responses for demo inputs, haversine fallback, offline queue, error states, seed reset button | C + D | Demo works with Wi-Fi off, except live LLM |
-| **26-27** | 🎬 **Demo and deck.** Script, slides, backup video, judge Q&A drilled | D + all | Two full rehearsals timed under 3 min |
+| **23-25** | 📊 **Evidence.** Gold-set evaluation, simulation (naive nearest-stock vs ReliefOS), KPI panel, LP optimiser | 3 + 4 | Numbers on a slide, labelled "simulated" |
+| **24-26** | 🛟 **Resilience.** Cached Gemini responses for demo inputs, haversine fallback, offline queue, error states, seed reset button | 2 + 1 | Demo works with Wi-Fi off, except live LLM |
+| **26-27** | 🎬 **Demo and deck.** Script, slides, backup video, judge Q&A drilled | all (not split by tech) | Two full rehearsals timed under 3 min |
 | **28** | 🧪 **Bug bash and freeze candidate.** Fresh-laptop install test: clone, run, demo | all | Someone who did not write the code runs it |
 | **29** | 🧊 **Feature freeze.** Bug fixes only. Pack: chargers, hotspot, HDMI, offline copy of repo and data, video on phone and USB | all | Tag `v1-demo` |
 
