@@ -15,7 +15,7 @@ Team Koshish | Zinnovatio 4.0 (30-31 Oct 2026, Chandigarh University) | Track: A
 | `docs/05_study_roadmap.md` | 15-day plan to Oct 30, what each member studies |
 | `docs/06_pitch_defense.md` | Likely judge questions and how to answer them |
 | `docs/07_competitive_landscape.md` | Existing tools and where ReliefOS is different (verify items marked) |
-
+| `docs/08_tech_stack_architecture.md` | Stack, data model, AI pipeline, matching algorithm, API, screens |
 
 Disaster relief supply-to-demand matching: field reports -> structured demand -> matched against stock -> ranked moves on a map.
 
