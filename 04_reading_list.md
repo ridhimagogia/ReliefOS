@@ -41,3 +41,12 @@ Priority: **P1** = read before Oct 22, **P2** = before Oct 28, **P3** = if time.
 - OpenStreetMap / Overpass Turbo https://overpass-turbo.eu
 - Logistics Cluster https://logcluster.org [B]
 - Humanitarian OpenStreetMap Team https://www.hotosm.org [B]
+
+---
+## Additions (merged from the second research kit; items not yet verified [B])
+**Extra topics:** material convergence (unsolicited, unneeded donations); min-cost flow, deprivation cost and equity in allocation; India's system (NDMA, NDRF, SDMAs, DDMAs, norms of assistance, IDRN).
+**Extra papers:** Van Wassenhove (2006), "Humanitarian aid logistics: supply chain management in high gear" (original source of the "~80%" claim; check it before quoting). Holguin-Veras et al. (2013) on the appropriate objective function / deprivation cost.
+**Extra platforms to check for prior art:** Crisis Cleanup, IFRC GO, keralarescue.in (2018), NDMA SACHET.
+**Extra data and APIs:** ReliefWeb API; Geofabrik India extract; OpenRouteService, Valhalla (routing); Photon (geocoding; check Nominatim usage policy); GDACS, USGS earthquakes (alerts); Kaggle "Disaster Tweets"; OASIS EDXL-RM (resource messaging standard).
+**Extra tools:** SciPy `linprog`, Pydantic, rapidfuzz, Gemini structured output (ai.google.dev).
+**Verify before the pitch:** DPDP Act duties for beneficiary data; current Gemini model names, limits, pricing; hackathon rules on pre-written code.
