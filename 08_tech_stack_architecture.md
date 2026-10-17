@@ -4,6 +4,10 @@ Aligned with the pitched stack (Tesseract + Gemini, Flask, MySQL, rule-based eng
 
 ## 1. System in one view
 
+![ReliefOS architecture](images/architecture.jpg)
+
+*Full-resolution diagram: [images/architecture.jpg](images/architecture.jpg).*
+
 ```
  FIELD INPUT                 INTAKE + AI                 CORE                      OUTPUT
  -----------                 -----------                 ----                      ------
