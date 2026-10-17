@@ -16,12 +16,13 @@ Team Koshish | Zinnovatio 4.0 (30-31 Oct 2026, Chandigarh University) | Track: A
 | `docs/06_pitch_defense.md` | Likely judge questions and how to answer them |
 | `docs/07_competitive_landscape.md` | Existing tools and where ReliefOS is different (verify items marked) |
 
-## Status of this repo
 
-- Step 1 (this commit): research pack.
-- Step 2 (next): detailed tech stack and architecture.
-- Step 3: diagrams (system, data flow, matching logic, deployment).
-- Step 4: hackathon build plan (what to prebuild, what to build on the day, what to fake).
+Disaster relief supply-to-demand matching: field reports -> structured demand -> matched against stock -> ranked moves on a map.
+
+- `docs/architecture.md`: system, workflow, matching and data-model diagrams (Mermaid, renders on GitHub) and stack decisions
+- `docs/hackathon-plan.md`: what to build before, hour-by-hour plan, must/don't, demo script, judge Q&A
+- `research/reading-list-and-resources.md`: what to study, papers, case studies, datasets (not yet web-verified)
+- `prototype/match.py`: working LP matching engine (`pip install scipy numpy && python prototype/match.py`)
 
 ## Verification convention
 
