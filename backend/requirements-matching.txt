@@ -1,0 +1,4 @@
+# Person 4 dependencies (matching, geo, offline node)
+scipy>=1.10        # optional: LP optimiser (falls back to greedy if missing)
+qrcode>=7.4        # join QR code (SVG output needs no Pillow)
+pytest>=7.0
