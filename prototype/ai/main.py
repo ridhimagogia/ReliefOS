@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from ocr_reader import read_request
 from ai_provider import parse_online
 
@@ -52,17 +53,19 @@ if __name__ == "__main__":
     # print(parse_request("Camp 2 needs 100 ors packets"))
     # print(parse_request("Camp 8 water 300"))
 
-    text = read_request("request.png")
+    text = read_request(str(Path(__file__).with_name("request.png")))
     result = parse_request(text)
 
-    # text = "Camp 9 ko 75 kambal urgently chahiye"
-    # text = "Camp 9 needs supplies"
+    # text = read_request(str(Path(__file__).with_name("request.png")))
+    # text = read_request(str(Path(__file__).with_name("request.png")))
     # result = parse_request(text)
 
     if result["needs_review"]:
         try:
             result = parse_online(text)
-        except Exception:
-            pass
+        except Exception as e:
+            print("Gemini error:", repr(e))
 
     print(result)
+
+
