@@ -9,3 +9,6 @@ frontend/node_modules/
 frontend/dist/
 prototype/frontend/node_modules/
 prototype/frontend/dist/
+
+reliefos_person4.zip
+*.zip
