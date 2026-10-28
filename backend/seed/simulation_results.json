@@ -1,0 +1,38 @@
+{
+  "label": "SIMULATED: seeded scenario, not real data",
+  "seed": 42,
+  "method": "Naive = arrival order, nearest single depot, no urgency, no split loads. ReliefOS = urgency-aware greedy with split loads. Same stock, demand and distance (haversine x 1.3).",
+  "scenario": {
+    "depots": 8,
+    "camps": 22,
+    "demands": 59,
+    "stock_rows": 31,
+    "vehicles": 12
+  },
+  "naive": {
+    "coverage_pct": 73.2,
+    "critical_coverage_pct": 68.2,
+    "critical_demands_with_zero_supply": 1,
+    "avg_eta_critical_h": 4.09,
+    "total_km": 7243.9,
+    "demands_fully_met": 28,
+    "total_demands": 59
+  },
+  "reliefos": {
+    "coverage_pct": 70.5,
+    "critical_coverage_pct": 100.0,
+    "critical_demands_with_zero_supply": 0,
+    "avg_eta_critical_h": 2.9,
+    "total_km": 9327.3,
+    "demands_fully_met": 40,
+    "total_demands": 59,
+    "shortage_rows": 14,
+    "moves_without_vehicle": 0
+  },
+  "improvement": {
+    "critical_coverage_pp": 31.8,
+    "coverage_pp": -2.7,
+    "avg_eta_critical_pct": -29.1,
+    "total_km_pct": 28.8
+  }
+}
