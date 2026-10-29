@@ -13,7 +13,10 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-from ..routing import distance as default_distance
+try:
+    from ..routing import distance as default_distance
+except ImportError:
+    from routing import distance as default_distance
 from .scoring import (
     MAX_ETA_H,
     MAX_KM,

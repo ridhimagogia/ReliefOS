@@ -107,3 +107,21 @@ def distance(a, b, speed_kmph=None, use_osrm=True) -> dict:
     else:
         eta = km / DEFAULT_SPEED_KMPH
     return {"km": round(km, 2), "eta_h": round(eta, 2), "source": source}
+
+
+from flask import Flask
+from flask_cors import CORS
+
+app = Flask(__name__)
+CORS(app)
+
+@app.route("/api/health")
+def health():
+    return {"status": "ok"}
+
+@app.route("/api/public/report", methods=["POST"])
+def public_report():
+    return {"status": "queued", "id": "stub-001"}
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
