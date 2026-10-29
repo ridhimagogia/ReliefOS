@@ -17,7 +17,7 @@ def extract(text: str) -> DemandDraft:
         if not provider.available():
             continue
         result = provider.extract(text)
-        if result.confidence >= 0.6:
+        if result.confidence >= 0.8:
             return result
 
     # fallback: return whatever rules gave us

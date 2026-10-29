@@ -1,6 +1,8 @@
-﻿from dataclasses import dataclass, field
+﻿
+from dataclasses import dataclass, field
 from typing import List, Optional
 import abc
+
 
 @dataclass
 class DemandDraft:
@@ -15,6 +17,13 @@ class DemandDraft:
     provider: str = "unknown"
     needs_review: bool = True
     raw_text: str = ""
+    source: str = "coordinator"
+    verified: bool = True
+    kind: str = "demand"
+    language: str = "en"
+    duplicate_of: Optional[str] = None
+    report_count: int = 1
+
 
 class ExtractionProvider(abc.ABC):
     @abc.abstractmethod
