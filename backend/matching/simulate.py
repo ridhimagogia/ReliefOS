@@ -94,8 +94,11 @@ def generate_scenario(seed=42, n_camps=22):
         for dep, w in zip(depots, ws):
             q = int(total * w / sum(ws))
             if q > 0:
-                stock.append({"id": sid, "location_id": dep["id"], "item_id": item_id, "quantity": q,
-                              "reserved": 0, "lat": dep["lat"], "lng": dep["lng"]})
+                stock.append({
+                    "id": sid, "location_id": dep["id"], "item_id": item_id, "quantity": q,
+                    "reserved": 0, "lat": dep["lat"], "lng": dep["lng"],
+                    "updated_at": "2026-10-29T18:00:00+05:30" if sid % 5 else "2026-10-26T09:00:00+05:30",
+                })
                 sid += 1
 
     vehicles = []
