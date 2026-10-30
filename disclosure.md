@@ -1,51 +1,82 @@
-# 🚑 ReliefOS
+# Honest Disclosures🚑
 
-Disaster-relief matching that works on a local network with zero internet. It turns messy field reports into structured demand, matches them to available stock, and proposes dispatches that a human coordinator approves. 📴
+This file records what is real, what is synthetic, and what changed during the build.
+Judges and evaluators should read this alongside the demo.
 
-Built for the Chandigarh University hackathon, 30–31 Oct 2026.
+---
 
-## 📋 Disclosure: what was built before vs. during
+## Demo data
 
-We want judges to see exactly what is new at this event and what is not.
+All camp names, depot locations, supply quantities and demand messages shown in the demo
+are **synthetic**. They are based on a fictional Punjab-flood scenario created for this
+hackathon. No real victim data, no real inventory records and no real government data
+are used or implied.
 
-### 🕰️ Before the hackathon (prep work, 25–29 Oct)
-Our prep repo: `<link to original repo>`
+---
 
-The core rule engine was prebuilt. The frontend was not: only a basic mock-data prototype existed, and we are rebuilding it during the event, so none of the new frontend counts as prior work.
+## Distances
 
-| Component | State at hackathon start |
-|---|---|
-| Matching engine (scoring, greedy allocator, LP toggle, shortage reports) | Written and unit-tested |
-| Geo-routing (haversine ×1.3, offline-safe) | Written and unit-tested |
-| Offline node (join endpoint, QR, basemap validator) | Written, not tested on a phone |
-| Extraction (rules + Gemini fallback) | Written for 5 items |
-| Old frontend | Basic mock-data prototype only, being replaced |
-| Stub dictionaries, helper scripts | Placeholders |
-| Research and architecture docs | Written |
+All distances shown in the UI are **straight-line estimates** (haversine formula x 1.3
+road factor). They are not road-routed. The UI labels them "straight-line estimate" wherever
+they appear.
 
-35 unit tests existed and passed before the event.
+---
 
-### 🏁 During the hackathon (30–31 Oct)
-- **Frontend rebuilt from scratch** (new coordinator console, public report page, offline queue, map) and wired to the real API
-- Flask backend (`app.py`), API endpoints, seed data, `requirements.txt`
-- Real item, unit and gazetteer dictionaries (Hindi/Hinglish)
-- Extraction fixes, duplicate clustering, supply parsing
-- Integration: extraction → matching → dashboard
-- Human review queue
-- Phone test over hotspot, with QR join
-- Bug fixes, demo polish, slides, deployment
+## Frontend rebuild
 
-The import commit in this repo's history, `Import prep modules`, marks where prep work ends. Commits after it were made during the event.
+The original prototype (in `prototype/`) used structured input fields: the coordinator
+typed item, quantity, urgency and location into a form. This defeated the product's core
+promise — that coordinators should never have to structure data themselves.
 
-## 🛠️ Stack
-Flask · React · SVG map with local GeoJSON basemap · rule-based scoring + LP · Gemini (online only) · haversine routing
+On 30 Oct 2026, the frontend was **rebuilt from scratch** in `frontend/` using
+React 19, TypeScript strict, Vite and Tailwind 4. The new frontend accepts only
+unstructured input (pasted text, photo, voice, call notes). Structured fields appear
+only as read-only output chips after parsing.
 
-## ▶️ Run
-```bash
-pip install -r requirements.txt
-OFFLINE_MODE=1 bash scripts/run_offline.sh
-pytest
-```
+The old prototype folder is kept for reference and for the rollback git tag.
 
-## 👭 Team
-Ridhima (lead), Khushali, Navya, Aastha
+---
+
+## AI pipeline
+
+- **Online:** Gemini API handles text extraction, OCR (photos) and speech-to-text (voice).
+- **Offline:** A rules-based parser (no network required) handles text. Its confidence is
+  capped at 0.65, so every offline record goes to the Review Queue for human verification.
+- **If neither works:** the submission is saved as a `needs_review` record with the
+  original file attached. A human reads or listens to it.
+
+The AI **proposes**. The coordinator **decides**. Nothing is dispatched automatically.
+
+---
+
+## False-report protection
+
+Public reports (from the `/public` page) are always unverified and always in the
+Review Queue. They cannot enter matching without a coordinator clicking Verify.
+A trust score (0-1) is computed from rule-based signals (unknown location, implausible
+quantity, sender reputation, corroboration). Critical unverified reports are pinned to
+the top of the queue with a "call back before dispatch" banner.
+
+A determined attacker with many SIMs and plausible details can still get through the
+automatic checks. The system lowers the odds, makes the cost small (a proposal behind
+a human gate, not a dispatch), and keeps everything traceable in the audit log.
+
+---
+
+## Parser accuracy
+
+Accuracy figures (X of 20 correct on item, qty, camp) will be recorded in
+`docs/06_pitch_defense.md` after the live test run on 30 Oct. The number on the
+slides is the real measured number, not an estimate.
+
+---
+
+## What is not built
+
+- WhatsApp Business API integration (needs Meta approval)
+- Automated helpline (needs Exotel/Twilio)
+- 112 integration (government system, no API access)
+- Road routing (haversine estimate only)
+- OTP or role-based auth beyond coordinator/public split
+- Native driver app
+- Production infrastructure or Docker
