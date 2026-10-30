@@ -1,1 +1,78 @@
-{"type": "FeatureCollection", "note": "PLACEHOLDER: replace with licence-checked district boundaries.", "features": [{"type": "Feature", "properties": {"name": "Punjab (coarse placeholder outline)", "placeholder": true}, "geometry": {"type": "Polygon", "coordinates": [[[73.88, 29.95], [74.4, 29.75], [75.2, 29.5], [76.0, 29.6], [76.55, 30.1], [76.85, 30.55], [76.7, 31.1], [76.1, 31.8], [75.6, 32.5], [75.0, 32.45], [74.6, 31.9], [74.5, 31.3], [74.2, 30.9], [73.88, 30.3], [73.88, 29.95]]]}}, {"type": "Feature", "properties": {"name": "Ludhiana", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.8573, 30.901]}}, {"type": "Feature", "properties": {"name": "Patiala", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [76.3869, 30.3398]}}, {"type": "Feature", "properties": {"name": "Jalandhar", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.5762, 31.326]}}, {"type": "Feature", "properties": {"name": "Amritsar", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [74.8723, 31.634]}}, {"type": "Feature", "properties": {"name": "Bathinda", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [74.9455, 30.211]}}, {"type": "Feature", "properties": {"name": "Sangrur", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.8421, 30.2458]}}, {"type": "Feature", "properties": {"name": "Moga", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.1667, 30.8167]}}, {"type": "Feature", "properties": {"name": "Hoshiarpur", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.917, 31.532]}}, {"type": "Feature", "properties": {"name": "Ferozepur", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [74.6225, 30.9331]}}, {"type": "Feature", "properties": {"name": "Fazilka", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [74.0286, 30.4036]}}, {"type": "Feature", "properties": {"name": "Tarn Taran", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [74.9286, 31.4519]}}, {"type": "Feature", "properties": {"name": "Kapurthala", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.38, 31.38]}}, {"type": "Feature", "properties": {"name": "Gurdaspur", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.4031, 32.0414]}}, {"type": "Feature", "properties": {"name": "Mansa", "kind": "town"}, "geometry": {"type": "Point", "coordinates": [75.3937, 29.9988]}}]}
+{
+  "type": "FeatureCollection",
+  "name": "punjab_districts",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "district": "Gurdaspur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.1, 32.2], [75.6, 32.3], [75.8, 31.8], [75.3, 31.7], [75.1, 32.2]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Amritsar", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[74.6, 31.8], [75.2, 31.8], [75.2, 31.4], [74.6, 31.4], [74.6, 31.8]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Hoshiarpur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.6, 31.8], [76.2, 31.9], [76.1, 31.3], [75.6, 31.4], [75.6, 31.8]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Jalandhar", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.2, 31.5], [75.8, 31.5], [75.8, 31.1], [75.3, 31.0], [75.2, 31.5]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Firozpur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[74.2, 31.1], [74.9, 31.1], [74.9, 30.7], [74.3, 30.6], [74.2, 31.1]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Ludhiana", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.5, 31.0], [76.2, 31.0], [76.1, 30.6], [75.4, 30.6], [75.5, 31.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Patiala", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[76.1, 30.6], [76.7, 30.5], [76.6, 30.1], [76.0, 30.1], [76.1, 30.6]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Sangrur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.5, 30.5], [76.1, 30.5], [76.0, 30.0], [75.4, 30.0], [75.5, 30.5]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Bathinda", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[74.6, 30.4], [75.3, 30.4], [75.2, 29.9], [74.7, 29.9], [74.6, 30.4]]]
+      }
+    }
+  ]
+}

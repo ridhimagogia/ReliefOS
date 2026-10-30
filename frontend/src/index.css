@@ -130,13 +130,18 @@ tbody tr:last-child td { border-bottom: 0; }
 .map-marker.camp.high circle:not(.marker-ring) { fill: var(--orange); }
 .map-marker.camp.low circle:not(.marker-ring) { fill: var(--green); }
 .marker-ring { fill: none; stroke: var(--red); stroke-width: .7; }
+.marker-ring.unverified { stroke: var(--amber) !important; stroke-width: 1.3; stroke-dasharray: 2 1.5; }
+.map-mode-badge { position: absolute; z-index: 5; right: 12px; top: 12px; background: rgba(250,248,243,.95); border: 1px solid var(--beige); padding: 3px 9px; border-radius: 12px; font-size: 10px; font-weight: 600; display: flex; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.map-mode-badge.online { color: #16814b; }
+.map-mode-badge.offline { color: #825600; }
 .map-controls { position: absolute; left: 12px; top: 12px; z-index: 3; box-shadow: 0 1px 4px #6f665944; }
 .map-controls button { display: block; width: 30px; height: 30px; border: 0; border-bottom: 1px solid var(--beige); background: #faf8f3; font-weight: 700; font-size: 18px; }
-.map-legend { position: absolute; z-index: 2; right: 12px; top: 12px; background: rgba(250,248,243,.93); border: 1px solid var(--beige); border-radius: 3px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 9px; }
+.map-legend { position: absolute; z-index: 2; right: 12px; top: 44px; background: rgba(250,248,243,.93); border: 1px solid var(--beige); border-radius: 3px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 9px; }
 .map-legend span { display: flex; gap: 7px; align-items: center; }
 .map-legend i { width: 8px; height: 8px; display: inline-block; background: var(--ink); }
 .map-legend .legend-circle, .map-legend .legend-critical { border-radius: 50%; }
 .map-legend .legend-critical { background: var(--red); }
+.map-legend .legend-unverified { border-radius: 50%; border: 1.5px dashed var(--amber); background: transparent; width: 9px; height: 9px; }
 .map-legend .legend-route { height: 1px; width: 12px; background: var(--burgundy); border-top: 1px dashed white; }
 .map-popup { position: absolute; z-index: 4; left: 50%; bottom: 12px; transform: translateX(-50%); min-width: 190px; background: #faf8f3; border: 1px solid var(--beige); padding: 10px 28px 10px 12px; box-shadow: 0 3px 12px #3e33252b; display: flex; flex-direction: column; gap: 3px; }
 .map-popup button { position: absolute; right: 5px; top: 4px; border: 0; background: transparent; }
@@ -182,6 +187,15 @@ dd { margin: 0; }
 .timeline span { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); font-size: 9px; white-space: nowrap; color: var(--muted); }
 .timeline i { height: 1px; flex: 1; background: var(--beige); }
 .info-box { margin: 6px 12px 12px; padding: 11px; background: #e4ebf2; color: #425568; }
+.result-card { padding: 14px; border-bottom: 1px solid var(--beige); display: flex; flex-direction: column; gap: 9px; background: rgba(255,255,255,.35); }
+.result-card:last-child { border-bottom: 0; }
+.result-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { padding: 3px 9px; border-radius: 3px; background: #f0eae1; border: 1px solid var(--beige); font-size: 11px; font-weight: 550; display: inline-flex; align-items: center; gap: 5px; }
+.chip b { color: var(--burgundy); }
+.sub-tabs { display: flex; gap: 6px; margin: 10px 0 12px; }
+.sub-tab-btn { padding: 5px 12px; border-radius: 3px; font-size: 11px; border: 1px solid var(--beige); background: #f7f3ec; font-weight: 600; }
+.sub-tab-btn.active { background: var(--burgundy); color: white; border-color: var(--burgundy); }
+.csv-box { border: 2px dashed var(--taupe); padding: 18px; text-align: center; border-radius: 4px; background: #faf8f4; margin-top: 12px; }
 
 /* review */
 .mini-kpis { display: flex; gap: 10px; }
@@ -227,6 +241,13 @@ blockquote { margin: 12px 0; padding: 22px; background: #f0ece5; font: 16px/1.5 
 progress { accent-color: var(--burgundy); }
 .confidence > progress { width: 100%; height: 16px; margin: 8px 0; accent-color: var(--amber); }
 .warning-box { color: #795100; background: #f7e8c7; padding: 10px; }
+.pinned-critical { border-left: 3px solid var(--red) !important; background: rgba(198,41,53,.04); }
+.report-count-badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 10px; background: #fdf0db; color: #925306; font-size: 10px; font-weight: 700; border: 1px solid #ebd0a1; }
+.duplicate-row { background: rgba(0,0,0,.02); font-size: 10.5px; color: var(--muted); padding-left: 20px; }
+.verify-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+.verify-badge.verified { background: #dcebdc; color: #146c3c; }
+.verify-badge.unverified { background: #faedc9; color: #825600; }
+
 .extract-fields > .field { margin-top: 16px; }
 .review-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
 .review-map .relief-map { height: 210px; min-height: 0; margin: 0; }
@@ -255,6 +276,10 @@ details p { margin-top: 7px; font-size: 10px; line-height: 1.5; }
 .bottom-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-top: 10px; }
 td progress { height: 10px; max-width: 80px; }
 .mini-btn { color: var(--burgundy); background: transparent; border: 1px solid var(--burgundy); padding: 2px 14px; }
+.warning-strip { background: #fbeed3; border: 1px solid #e0c587; color: #784c03; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 11px; }
+.conflict-card { padding: 12px; border: 1px solid #e3d5be; background: #faf5eb; border-radius: 4px; margin-bottom: 9px; }
+.conflict-winner { background: #dcebdc; color: #146c3c; padding: 3px 8px; border-radius: 3px; font-weight: 600; display: inline-block; margin: 4px 0; }
+.stale-badge { background: #fae0c4; color: #a34d05; border: 1px solid #e0b484; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-size: 10px; display: inline-flex; align-items: center; gap: 4px; }
 .reasoning { margin: 9px 16px; padding-left: 13px; font-size: 10px; line-height: 1.8; }
 .reasoning li::marker { color: var(--burgundy); }
 
