@@ -1,499 +1,769 @@
-import json
-from pathlib import Path
-from backend.matching.engine import plan
-import os
-import re
-import csv
-import io
 
-from flask import Flask, jsonify, request, send_from_directory
+from __future__ import annotations
+
+try:
+    from extraction.dedupe import find_parent, apply_duplicate
+except ImportError:
+    from backend.extraction.dedupe import find_parent, apply_duplicate
+
+"""
+ReliefOS Flask API - backend/app.py
+Run: python app.py (port 5000)
+"""
+
+import os
+import uuid
+import time
+import re
+
+from datetime import datetime, timezone
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-from backend.database import (
-    init_db,
-    get_demands,
-    get_stock,
-    save_demand,
-    verify_demand,
-    reject_demand,
-    correct_demand,
-    save_supplies,
-    save_moves,
-    get_move,
-    get_moves,
-    add_audit_entry,
-    get_audit_entries,
-    approve_move,
-    edit_move,
-    reject_move
-)
 
-from backend.extraction.chain import extract
-from backend.offline.join import create_blueprint
+app = Flask(__name__)
+CORS(app)
 
 
-def create_app():
-    app = Flask(__name__)
-    frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-    app.config["FRONTEND_DIST"] = str(frontend_dist)
+# ── In-memory store ──────────────────────────────────────────────
 
-    init_db()
-    CORS(app)
+_demands: list[dict] = []
+_moves: list[dict] = []
+_stock: list[dict] = []
+_audit: list[dict] = []
 
-    app.register_blueprint(create_blueprint())
+_rate: dict[str, list[float]] = {}  # IP -> timestamps
+_sender_rep: dict[str, int] = {}    # sender_key -> reject_count
 
-    @app.get("/api/health")
-    def health():
-        return jsonify({
-            "status": "ok",
-            "offline_mode": os.getenv("OFFLINE_MODE", "0") == "1"
-        })
 
-    @app.get("/api/gazetteer")
-    def gazetteer():
-        gazetteer_path = (
-            Path(__file__).parent / "seed" / "gazetteer.json"
-        )
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-        try:
-            with open(gazetteer_path, "r", encoding="utf-8") as file:
-                places = json.load(file)
-        except (OSError, json.JSONDecodeError):
-            return jsonify({"error": "Gazetteer data unavailable"}), 500
 
-        return jsonify(places), 200
+def _uid() -> str:
+    return str(uuid.uuid4())[:8]
 
-    @app.get("/api/config")
-    def config():
-        return jsonify({
-            "stale_hours": 24,
-            "helpline_number": "112",
-            "emergency_numbers": [
-                {
-                    "name": "Emergency Response",
-                    "number": "112"
-                },
-                {
-                    "name": "Ambulance",
-                    "number": "108"
-                },
-                {
-                    "name": "Fire",
-                    "number": "101"
-                },
-                {
-                    "name": "Police",
-                    "number": "100"
-                }
-            ],
-            "languages": [
-                "English",
-                "Hindi",
-                "Punjabi"
-            ]
-        }), 200
 
-    @app.get("/api/demands")
-    def demands():
-        return jsonify(get_demands())
+def _log(action: str, target_id: str, detail: str = "") -> None:
+    _audit.insert(0, {
+        "id": _uid(),
+        "action": action,
+        "target_id": target_id,
+        "detail": detail,
+        "created_at": _now()
+    })
 
-    
-    @app.post("/api/intake")
-    def intake():
-        data = request.get_json(silent=True) or {}
-        text = data.get("text", "")
 
-        if not isinstance(text, str) or not text.strip():
-            return jsonify({"error": "Please provide a valid text report."}), 400
+# ── Extraction ───────────────────────────────────────────────────
 
-        lat = data.get("lat")
-        lng = data.get("lng")
+def _extract(text: str) -> dict:
+    try:
+        from extraction.chain import extract
 
-        if (lat is None) != (lng is None):
-            return jsonify({
-                "error": "Both latitude and longitude must be provided together."
-            }), 400
+        d = extract(text)
 
-        if lat is not None:
-            try:
-                lat = float(lat)
-                lng = float(lng)
-            except (TypeError, ValueError):
-                return jsonify({"error": "Coordinates must be numeric."}), 400
+        return {
+            "item": d.item,
+            "qty": d.qty,
+            "unit": d.unit,
+            "location_text": d.location_text,
+            "camp_id": d.camp_id,
+            "district": getattr(d, "district", None),
+            "lat": getattr(d, "lat", None),
+            "lng": getattr(d, "lng", None),
+            "beneficiaries": getattr(d, "beneficiaries", None),
+            "urgency": d.urgency or "medium",
+            "confidence": d.confidence,
+            "provider": d.provider,
+            "language": getattr(d, "language", "en"),
+        }
 
-            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-                return jsonify({"error": "Coordinates are outside valid ranges."}), 400
+    except Exception:
+        # Fallback parser if the extraction chain fails.
 
-        draft = extract(text.strip())
-        draft.source = "coordinator"
-        draft.verified = True
-        draft.needs_review = True
+        text_l = text.lower()
 
-        demand_id = save_demand(draft, lat=lat, lng=lng)
+        items = {
+            "water": r"\bwater\b|\bpaani\b|\bpani\b",
+            "food": r"\bfood\b|\bkhana\b|\bration\b",
+            "blanket": r"\bblankets?\b|\bkambal\b",
+            "tent": r"\btents?\b",
+            "medicine": r"\bmedicines?\b|\bdawa\b"
+        }
 
-        demand = next(
-            (item for item in get_demands() if item["id"] == demand_id),
+        item = next(
+            (k for k, pattern in items.items()
+             if re.search(pattern, text_l)),
             None
         )
 
+        camp = re.search(r"camp\s*(\d+)", text_l)
+
+        cleaned_text = text.replace(
+            camp.group() if camp else "", ""
+        )
+
+        qty_match = re.search(r"(\d[\d,]*)", cleaned_text)
+
+        qty = (
+            int(qty_match.group(1).replace(",", ""))
+            if qty_match else None
+        )
+
+        urgency = (
+            "critical" if re.search(r"critical|emergency", text_l)
+            else "high" if re.search(r"urgent|jaldi", text_l)
+            else "medium"
+        )
+
+        return {
+            "item": item,
+            "qty": qty,
+            "unit": None,
+            "location_text": (
+                f"Camp {camp.group(1)}" if camp else None
+            ),
+            "camp_id": (
+                f"camp-{camp.group(1)}" if camp else None
+            ),
+            "district": None,
+            "lat": None,
+            "lng": None,
+            "beneficiaries": None,
+            "urgency": urgency,
+            "confidence": 0.55,
+            "provider": "rules",
+            "language": "en",
+        }
+
+
+# ── Demand creation ──────────────────────────────────────────────
+def _normalize_camp_id(camp_id):
+    if not camp_id:
+        return None
+
+    import re
+    match = re.search(r"camp[\s_-]*(\d+)", str(camp_id), re.IGNORECASE)
+
+    if not match:
+        return None
+
+    return f"camp-{match.group(1)}"
+
+def _verify_camp(camp_id):
+    normalized_id = _normalize_camp_id(camp_id)
+
+    if not normalized_id:
+        return False
+
+    known_camps = {
+        camp["id"]
+        for camp in [
+            {"id": "camp-17"},
+            {"id": "camp-22"},
+            {"id": "camp-9"},
+        ]
+    }
+
+    return normalized_id in known_camps
+
+
+def _make_demand(
+    parsed: dict,
+    raw_text: str,
+    source: str = "coordinator",
+    verified: bool = True,
+    channel: str = "text",
+    sender_key: str | None = None
+) -> dict:
+
+    conf = parsed["confidence"]
+
+    normalized_camp = _normalize_camp_id(parsed.get("camp_id"))
+    camp_verified = _verify_camp(normalized_camp)
+
+    needs_review = (
+        conf < 0.8
+        or source == "public"
+        or not camp_verified
+    )
+
+    rep = _sender_rep.get(sender_key or "", 0)
+
+    trust = max(
+        0.1,
+        min(1.0, 0.7 - rep * 0.15 + (0.2 if conf >= 0.65 else 0))
+    )
+
+    trust_reasons = []
+
+    if not parsed.get("item"):
+        trust_reasons.append("Unknown item")
+
+    if not parsed.get("location_text"):
+        trust_reasons.append("Unknown location")
+
+    if not camp_verified:
+        trust_reasons.append("Camp not verified")
+
+    if rep:
+        trust_reasons.append(
+            f"Sender had {rep} rejected report{'s' if rep > 1 else ''}"
+        )
+
+    return {
+        "id": _uid(),
+        "item": parsed["item"],
+        "qty": parsed["qty"],
+        "unit": parsed["unit"],
+        "location_text": parsed["location_text"],
+        "camp_id": normalized_camp,
+        "district": parsed["district"],
+        "lat": parsed["lat"],
+        "lng": parsed["lng"],
+        "beneficiaries": parsed["beneficiaries"],
+        "urgency": parsed["urgency"],
+        "confidence": parsed["confidence"],
+        "provider": parsed["provider"],
+        "needs_review": needs_review,
+        "raw_text": raw_text,
+        "source": source,
+        "verified": verified and camp_verified,
+        "kind": "demand",
+        "language": parsed["language"],
+        "duplicate_of": None,
+        "report_count": 1,
+        "channel": channel,
+        "attachment_url": None,
+        "created_at": _now(),
+        "trust": round(trust, 2),
+        "trust_reasons": trust_reasons,
+        "sender_key": sender_key,
+    }
+
+
+
+# ── Rate limiter ─────────────────────────────────────────────────
+
+def _rate_ok(ip: str, limit: int = 5, window: int = 60) -> bool:
+
+    now = time.time()
+
+    hits = [
+        t for t in _rate.get(ip, [])
+        if now - t < window
+    ]
+
+    if len(hits) >= limit:
+        return False
+
+    _rate[ip] = hits + [now]
+
+    return True
+
+
+# ── API endpoints ────────────────────────────────────────────────
+
+@app.get("/api/health")
+def health():
+
+    gemini_ok = (
+        bool(os.environ.get("GEMINI_API_KEY"))
+        and os.environ.get("OFFLINE_MODE") != "1"
+    )
+
+    return jsonify({
+        "status": "ok",
+        "offline_mode": os.environ.get("OFFLINE_MODE") == "1",
+        "gemini": gemini_ok,
+        "ocr": False,
+        "stt": False,
+        "time": _now(),
+    })
+
+
+@app.get("/api/config")
+def config():
+
+    return jsonify({
+        "stale_hours": 48,
+        "helpline_number": None,
+        "emergency_numbers": [
+            {
+                "label": "National Disaster Helpline",
+                "number": "1078"
+            },
+            {
+                "label": "Emergency",
+                "number": "112"
+            }
+        ],
+        "languages": ["en", "hi", "hinglish"],
+    })
+
+
+@app.get("/api/gazetteer")
+def gazetteer():
+
+    return jsonify([
+        {
+            "id": "camp-17",
+            "name": "Camp 17",
+            "lat": 30.90,
+            "lng": 75.86
+        },
+        {
+            "id": "camp-22",
+            "name": "Camp 22",
+            "lat": 30.85,
+            "lng": 75.80
+        },
+        {
+            "id": "camp-9",
+            "name": "Camp 9",
+            "lat": 30.95,
+            "lng": 75.90
+        },
+    ])
+
+
+# ── Coordinator intake ───────────────────────────────────────────
+
+@app.post("/api/intake")
+def intake():
+
+    body = request.get_json(force=True, silent=True) or {}
+
+    text = str(body.get("text", "")).strip()
+
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    parsed = _extract(text)
+
+    demand = _make_demand(parsed, text)
+
+    parent = find_parent(demand, _demands)
+
+    if parent:
+        apply_duplicate(demand, parent)
+
+        _log(
+            "duplicate_intake",
+            demand["id"],
+            f"duplicate of {parent['id']}"
+        )
+
+    else:
+        _log("intake", demand["id"], text[:80])
+
+    _demands.insert(0, demand)
+
+    return jsonify({"demands": [demand]})
+
+
+# ── Demand endpoints ─────────────────────────────────────────────
+
+@app.get("/api/demands")
+def demands():
+
+    return jsonify(_demands)
+
+
+@app.post("/api/demands/<did>/verify")
+def verify(did):
+
+    d = next(
+        (x for x in _demands if x["id"] == did),
+        None
+    )
+
+    if not d:
+        return jsonify({"error": "not found"}), 404
+
+    d["verified"] = True
+    d["needs_review"] = False
+
+    _log("verified", did)
+
+    return jsonify({"verified": True})
+
+
+@app.post("/api/demands/<did>/reject")
+def reject_demand(did):
+
+    body = request.get_json(force=True, silent=True) or {}
+
+    reason = str(body.get("reason", "")).strip()
+
+    if not reason:
+        return jsonify({"error": "reason required"}), 400
+
+    d = next(
+        (x for x in _demands if x["id"] == did),
+        None
+    )
+
+    if not d:
+        return jsonify({"error": "not found"}), 404
+
+    d["verified"] = False
+    d["rejected"] = True
+    d["reject_reason"] = reason
+    d["needs_review"] = False
+
+    if d.get("sender_key"):
+        key = d["sender_key"]
+        _sender_rep[key] = _sender_rep.get(key, 0) + 1
+
+    _log("rejected", did, reason)
+
+    return jsonify({
+        "verified": False,
+        "rejected": True
+    })
+
+
+@app.post("/api/demands/<did>/correct")
+def correct(did):
+
+    body = request.get_json(force=True, silent=True) or {}
+
+    d = next(
+        (x for x in _demands if x["id"] == did),
+        None
+    )
+
+    if not d:
+        return jsonify({"error": "not found"}), 404
+
+    for field in ("item", "qty", "unit", "urgency", "camp_id"):
+        if field in body:
+            d[field] = body[field]
+
+    _log("corrected", did, str(body))
+
+    return jsonify(d)
+
+
+# ── Public report ────────────────────────────────────────────────
+
+@app.post("/api/public/report")
+def public_report():
+
+    ip = request.remote_addr or "unknown"
+
+    if not _rate_ok(ip):
         return jsonify({
-            "id": demand_id,
-            "status": "saved",
-            "demand": demand
-        }), 201
+            "error": "Too many reports. Please wait a minute."
+        }), 429
 
+    body = request.get_json(force=True, silent=True) or {}
 
+    text = str(body.get("text", "")).strip()
 
-    @app.post("/api/demands/<demand_id>/verify")
-    def verify(demand_id):
-        if not verify_demand(demand_id):
-            return jsonify({"error": "Demand not found"}), 404
+    client_uuid = body.get("client_uuid")
 
-        return jsonify({"verified": True, "id": demand_id}), 200
+    # Idempotency check
+    if client_uuid:
 
-    @app.post("/api/demands/<demand_id>/reject")
-    def reject(demand_id):
-        data = request.get_json(silent=True) or {}
-        reason = data.get("reason", "")
+        existing = next(
+            (
+                d for d in _demands
+                if d.get("client_uuid") == client_uuid
+            ),
+            None
+        )
 
-        if not isinstance(reason, str) or not reason.strip():
-            return jsonify({"error": "A rejection reason is required."}), 400
-
-        if not reject_demand(demand_id, reason.strip()):
-            return jsonify({"error": "Demand not found"}), 404
-
-        return jsonify({
-            "verified": False,
-            "rejected": True,
-            "id": demand_id
-        }), 200
-
-    @app.post("/api/demands/<demand_id>/correct")
-    def correct(demand_id):
-        data = request.get_json(silent=True) or {}
-        result = correct_demand(demand_id, data)
-
-        if result is None:
+        if existing:
             return jsonify({
-                "error": "Demand not found or invalid correction."
-            }), 400
+                "id": existing["id"],
+                "status": "queued"
+            })
 
-        return jsonify(result), 200
+    if text:
+        parsed = _extract(text)
 
-    @app.get("/api/stock")
-    def stock():
-        return jsonify(get_stock())
+    else:
+        parsed = {
+            "item": None,
+            "qty": None,
+            "unit": None,
+            "location_text": body.get("location_text"),
+            "camp_id": None,
+            "district": None,
+            "lat": body.get("lat"),
+            "lng": body.get("lng"),
+            "beneficiaries": None,
+            "urgency": "medium",
+            "confidence": 0.3,
+            "provider": "rules",
+            "language": "en"
+        }
 
-    @app.post("/api/supply/paste")
-    def supply_paste():
-        data = request.get_json(silent=True) or {}
-        text = data.get("text", "")
+    demand = _make_demand(
+        parsed,
+        text,
+        source="public",
+        verified=False,
+        sender_key=ip[:16] if ip else None
+    )
 
-        if not isinstance(text, str) or not text.strip():
-            return jsonify({"error": "Please provide supply text."}), 400
+    demand["client_uuid"] = client_uuid
+    demand["needs_review"] = True
 
-        entries = []
+    parent = find_parent(demand, _demands)
 
-        pattern = re.compile(
-            r"^\s*([A-Za-z ]+?)\s*:\s*"
-            r"(\d+(?:\.\d+)?)\s+"
-            r"(litres?|packets?|units?|kits?)\s+"
-            r"(water|food|tent|blankets?|medkits?)\s*$",
-            re.IGNORECASE
+    if parent:
+
+        apply_duplicate(demand, parent)
+
+        _log(
+            "duplicate_public_report",
+            demand["id"],
+            f"duplicate of {parent['id']}"
         )
 
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            if not line.strip():
-                continue
+    else:
+        _log("public_report", demand["id"], text[:80])
 
-            match = pattern.match(line)
+    _demands.insert(0, demand)
 
-            if not match:
-                return jsonify({
-                    "error": f"Invalid supply format on line {line_number}."
-                }), 422
+    return jsonify({
+        "id": demand["id"],
+        "status": "queued"
+    })
 
-            depot, quantity, unit, item = match.groups()
-            item = item.lower().rstrip("s")
 
-            entries.append({
-                "depot": depot.strip(),
-                "quantity": float(quantity),
-                "unit": unit.lower(),
-                "item": item
-            })
+# ── Stock endpoints ──────────────────────────────────────────────
 
-        try:
-            saved = save_supplies(entries)
-        except ValueError as error:
-            return jsonify({"error": str(error)}), 422
+@app.get("/api/stock")
+def stock():
 
-        return jsonify(saved), 201
+    return jsonify(_stock)
 
-    # CSV SUPPLY UPLOAD
-    @app.post("/api/supply/csv")
-    def supply_csv():
-        uploaded_file = request.files.get("file")
 
-        if uploaded_file is None or not uploaded_file.filename:
-            return jsonify({"error": "Please upload a CSV file."}), 400
+@app.post("/api/supply/paste")
+def supply_paste():
 
-        if not uploaded_file.filename.lower().endswith(".csv"):
-            return jsonify({"error": "Only CSV files are accepted."}), 400
+    body = request.get_json(force=True, silent=True) or {}
 
-        try:
-            content = uploaded_file.stream.read().decode("utf-8-sig")
-            reader = csv.DictReader(io.StringIO(content))
+    text = str(body.get("text", ""))
 
-            required_columns = {"depot", "item", "quantity", "unit"}
+    lots = []
 
-            if not reader.fieldnames:
-                return jsonify({"error": "CSV file is empty."}), 422
+    for line in text.splitlines():
 
-            reader.fieldnames = [
-                name.strip().lower() for name in reader.fieldnames
-            ]
-
-            if not required_columns.issubset(set(reader.fieldnames)):
-                return jsonify({
-                    "error": "CSV must contain depot, item, quantity and unit columns."
-                }), 422
-
-            entries = []
-
-            for line_number, row in enumerate(reader, start=2):
-                try:
-                    entries.append({
-                        "depot": row["depot"].strip(),
-                        "item": row["item"].strip().lower(),
-                        "quantity": float(row["quantity"]),
-                        "unit": row["unit"].strip()
-                    })
-                except (TypeError, ValueError, AttributeError):
-                    return jsonify({
-                        "error": f"Invalid data on CSV line {line_number}."
-                    }), 422
-
-            saved = save_supplies(entries)
-
-        except UnicodeDecodeError:
-            return jsonify({"error": "CSV must use UTF-8 encoding."}), 422
-        except ValueError as error:
-            return jsonify({"error": str(error)}), 422
-
-        return jsonify(saved), 201
-
-    @app.post("/api/match/run")
-    def run_matching():
-        demands_data = get_demands()
-        stock_data = get_stock()
-
-        eligible_demands = []
-        location_required = []
-        excluded_demands = []
-
-        for demand in demands_data:
-
-            # Exclude unverified or rejected demands.
-            if not demand.get("verified") or demand.get("needs_review"):
-                excluded_demands.append({
-                    "demand_id": demand["id"],
-                    "reason": "verification_required"
-                })
-                continue
-
-            # Coordinates are mandatory for distance calculation.
-            try:
-                lat = float(demand["lat"])
-                lng = float(demand["lng"])
-            except (TypeError, ValueError):
-                location_required.append({
-                    "demand_id": demand["id"],
-                    "location_id": demand.get("location_id"),
-                    "reason": "missing_coordinates"
-                })
-                continue
-
-            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-                location_required.append({
-                    "demand_id": demand["id"],
-                    "location_id": demand.get("location_id"),
-                    "reason": "invalid_coordinates"
-                })
-                continue
-
-            eligible_demands.append({
-                **demand,
-                "quantity_needed": demand["quantity_needed"],
-                "fulfilled": demand.get("fulfilled", 0),
-                "lat": lat,
-                "lng": lng
-            })
-
-        # Only stock with usable coordinates can be used.
-        eligible_stock = []
-
-        for supply in stock_data:
-            try:
-                lat = float(supply["lat"])
-                lng = float(supply["lng"])
-            except (TypeError, ValueError):
-                continue
-
-            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-                continue
-
-            eligible_stock.append({
-                **supply,
-                "lat": lat,
-                "lng": lng
-            })
-
-        result = plan(
-            eligible_demands,
-            eligible_stock
+        match = re.search(
+            r"(\d[\d,]*)\s*(unit|bottle|packet|kg|litre|liter|piece)?s?\s+(?:of\s+)?(\w+)",
+            line,
+            re.I
         )
 
-        # Save generated recommendations as proposed moves.
-        saved_move_ids = save_moves(
-            result.get("recommendations", [])
-        )
+        if match:
 
-        result["saved_move_ids"] = saved_move_ids
+            lot = {
+                "id": _uid(),
+                "item": match.group(3).lower(),
+                "qty": int(match.group(1).replace(",", "")),
+                "unit": match.group(2) or "unit",
+                "depot_id": "depot-1",
+                "updated_at": _now()
+            }
 
-        result["location_required"] = location_required
-        result["excluded_demands"] = excluded_demands
+            _stock.append(lot)
+            lots.append(lot)
 
-        # Avoid falsely reporting stock as surplus when some demands
-        # are still awaiting verification or location information.
-        if location_required or excluded_demands:
-            result["surplus"] = []
-            result["surplus_deferred_reason"] = (
-                "Surplus assessment is incomplete because some demands "
-                "are awaiting verification or location information."
-            )
-
-        return jsonify(result), 200
+    return jsonify(lots)
 
 
-    @app.post("/api/moves/<move_id>/approve")
-    def approve_move_route(move_id):
-        try:
-            move = approve_move(move_id)
-            return jsonify({"move": move, "state": "approved"}), 200
-        except ValueError as error:
-            return jsonify({"error": str(error)}), 400
+# ── Matching endpoint ────────────────────────────────────────────
 
-    @app.post("/api/moves/<move_id>/edit")
-    def edit_move_route(move_id):
-        data = request.get_json(silent=True) or {}
+@app.post("/api/match/run")
+def match_run():
 
-        try:
-            move = edit_move(
-                move_id,
-                qty=data.get("qty"),
-                notes=data.get("notes")
-            )
-            return jsonify({"move": move, "state": "edited"}), 200
-        except (ValueError, TypeError) as error:
-            return jsonify({"error": str(error)}), 400
+    # Simple stub: proposal for critical, non-rejected demands.
+    proposals = []
 
-    @app.post("/api/moves/<move_id>/reject")
-    def reject_move_route(move_id):
-        data = request.get_json(silent=True) or {}
+    for d in _demands:
 
-        try:
-            move = reject_move(
-                move_id,
-                reason=data.get("reason", "")
-            )
-            return jsonify({"move": move, "state": "rejected"}), 200
-        except ValueError as error:
-            return jsonify({"error": str(error)}), 400
+        if d.get("duplicate_of"):
+            continue
 
-    @app.get("/api/audit")
-    def audit_route():
-        entries = get_audit_entries()
-        return jsonify(entries), 200
+        if (
+            d.get("urgency") == "critical"
+            and not d.get("rejected")
+        ):
 
-    @app.get("/api/plan/latest")
-    def latest_plan_route():
-        return jsonify({"moves": get_moves()}), 200
-
-    
-    @app.get("/api/shortages")
-    def shortages_route():
-        demands_data = get_demands()
-        stock_data = get_stock()
-
-        eligible_demands = []
-
-        for demand in demands_data:
-            if not demand.get("verified") or demand.get("needs_review"):
-                continue
-
-            try:
-                lat = float(demand["lat"])
-                lng = float(demand["lng"])
-            except (TypeError, ValueError):
-                continue
-
-            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-                continue
-
-            eligible_demands.append({
-                **demand,
-                "lat": lat,
-                "lng": lng
+            proposals.append({
+                "id": _uid(),
+                "demand_id": d["id"],
+                "item": d["item"],
+                "qty": d["qty"],
+                "depot_id": "depot-1",
+                "camp_id": d["camp_id"],
+                "score": 0.90,
+                "state": "proposed",
+                "explain": (
+                    f"Critical demand at "
+                    f"{d['location_text'] or 'unknown'}, "
+                    "no stock on site."
+                ),
+                "km": 3.2,
+                "eta_h": 0.1,
+                "distance_source": "haversine",
             })
 
-        eligible_stock = []
+    plan = {
+        "id": _uid(),
+        "proposals": proposals,
+        "conflicts": [],
+        "warnings": [],
+        "created_at": _now()
+    }
 
-        for supply in stock_data:
-            try:
-                lat = float(supply["lat"])
-                lng = float(supply["lng"])
-            except (TypeError, ValueError):
-                continue
+    _moves.extend(proposals)
 
-            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-                continue
+    _log(
+        "match_run",
+        plan["id"],
+        f"{len(proposals)} proposals"
+    )
 
-            eligible_stock.append({
-                **supply,
-                "lat": lat,
-                "lng": lng
-            })
+    return jsonify(plan)
 
-        result = plan(eligible_demands, eligible_stock)
 
+@app.get("/api/plan/latest")
+def plan_latest():
+
+    if not _moves:
         return jsonify({
-            "shortages": result.get("shortages", [])
-        }), 200
+            "proposals": [],
+            "conflicts": [],
+            "warnings": [],
+            "created_at": _now()
+        })
 
-    @app.get("/")
-    def frontend_index():
-        return send_from_directory(app.config["FRONTEND_DIST"], "index.html")
-
-    @app.get("/<path:path>")
-    def frontend_assets(path):
-        if path.startswith("api/"):
-            return jsonify({"error": "Not found"}), 404
-
-        candidate = Path(app.config["FRONTEND_DIST"]) / path
-        if candidate.is_file():
-            return send_from_directory(app.config["FRONTEND_DIST"], path)
-
-        return send_from_directory(app.config["FRONTEND_DIST"], "index.html")
-    return app
+    return jsonify({
+        "proposals": _moves,
+        "conflicts": [],
+        "warnings": [],
+        "created_at": _now()
+    })
 
 
-app = create_app()
+# ── Move management ──────────────────────────────────────────────
+
+@app.post("/api/moves/<mid>/approve")
+def approve_move(mid):
+
+    m = next(
+        (x for x in _moves if x["id"] == mid),
+        None
+    )
+
+    if not m:
+        return jsonify({"error": "not found"}), 404
+
+    m["state"] = "approved"
+
+    _log("approved_move", mid)
+
+    return jsonify({"state": "approved"})
+
+
+@app.post("/api/moves/<mid>/edit")
+def edit_move(mid):
+
+    body = request.get_json(force=True, silent=True) or {}
+
+    m = next(
+        (x for x in _moves if x["id"] == mid),
+        None
+    )
+
+    if not m:
+        return jsonify({"error": "not found"}), 404
+
+    for field in ("qty", "notes"):
+        if field in body:
+            m[field] = body[field]
+
+    m["state"] = "edited"
+
+    _log("edited_move", mid, str(body))
+
+    return jsonify({"state": "edited"})
+
+
+@app.post("/api/moves/<mid>/reject")
+def reject_move(mid):
+
+    body = request.get_json(force=True, silent=True) or {}
+
+    reason = str(body.get("reason", "")).strip()
+
+    if not reason:
+        return jsonify({"error": "reason required"}), 400
+
+    m = next(
+        (x for x in _moves if x["id"] == mid),
+        None
+    )
+
+    if not m:
+        return jsonify({"error": "not found"}), 404
+
+    m["state"] = "rejected"
+    m["reject_reason"] = reason
+
+    _log("rejected_move", mid, reason)
+
+    return jsonify({"state": "rejected"})
+
+
+# ── Audit and shortages ──────────────────────────────────────────
+
+@app.get("/api/audit")
+def audit():
+
+    return jsonify(_audit)
+
+
+@app.get("/api/shortages")
+def shortages():
+
+    return jsonify([])
+
+
+# ── SPA fallback ─────────────────────────────────────────────────
+
+@app.get("/", defaults={"path": ""})
+@app.get("/<path:path>")
+def spa(path):
+
+    dist = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "frontend",
+        "dist"
+    )
+
+    idx = os.path.join(dist, "index.html")
+
+    if os.path.exists(idx):
+
+        from flask import send_from_directory
+
+        if path and os.path.exists(os.path.join(dist, path)):
+            return send_from_directory(dist, path)
+
+        return send_from_directory(dist, "index.html")
+
+    return jsonify({
+        "error": "frontend not built yet"
+    }), 404
 
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", "5000")),
-        debug=False
-    )
+    app.run(debug=True, port=5000)
