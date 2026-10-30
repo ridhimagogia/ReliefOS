@@ -183,9 +183,9 @@ def build_plan(db, weights=None, algorithm="greedy"):
         )
 
         alloc_qty = (
-            edited_qty
-            if edited_qty is not None and move_state == "edited"
-            else float(rec.get("qty", 0))
+           edited_qty
+           if edited_qty is not None
+           else float(rec.get("qty", 0))
         )
 
         move_dict = {
