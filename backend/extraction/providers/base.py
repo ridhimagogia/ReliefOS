@@ -23,6 +23,7 @@ class DemandDraft:
     language: str = "en"
     duplicate_of: Optional[str] = None
     report_count: int = 1
+    items: List[dict] = field(default_factory=list)
 
 
 class ExtractionProvider(abc.ABC):

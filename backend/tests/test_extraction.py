@@ -30,3 +30,46 @@ def test_chain_offline():
     r = extract("Camp 5 needs 300 water urgently")
     assert r.provider in ("rules", "gemini_failed")
     assert r.item == "water"
+
+def test_gemini_rejects_unknown_item(monkeypatch):
+    import sys
+    import types
+    import json
+    from backend.extraction.providers.gemini import GeminiProvider
+
+    fake_response = types.SimpleNamespace(
+        text=json.dumps({
+            "item": "helicopter",
+            "qty": 10,
+            "camp_id": "camp17",
+            "urgency": "high",
+            "confidence": 0.9,
+            "needs_review": False
+        })
+    )
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            return fake_response
+
+    class FakeClient:
+        models = FakeModels()
+
+    google = types.ModuleType("google")
+    genai = types.ModuleType("google.genai")
+    genai_types = types.ModuleType("google.genai.types")
+
+    genai.Client = lambda: FakeClient()
+    genai_types.GenerateContentConfig = lambda **kwargs: kwargs
+    genai_types.HttpOptions = lambda **kwargs: kwargs
+    genai.types = genai_types
+    google.genai = genai
+
+    monkeypatch.setitem(sys.modules, "google", google)
+    monkeypatch.setitem(sys.modules, "google.genai", genai)
+    monkeypatch.setitem(sys.modules, "google.genai.types", genai_types)
+
+    result = GeminiProvider().extract("Camp 17 needs helicopters")
+
+    assert result.item is None
+    assert result.needs_review is True
