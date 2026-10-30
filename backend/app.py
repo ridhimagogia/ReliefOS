@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from backend.matching.engine import plan
 import os
 import re
@@ -44,6 +46,50 @@ def create_app():
             "status": "ok",
             "offline_mode": os.getenv("OFFLINE_MODE", "0") == "1"
         })
+
+    @app.get("/api/gazetteer")
+    def gazetteer():
+        gazetteer_path = (
+            Path(__file__).parent / "seed" / "gazetteer.json"
+        )
+
+        try:
+            with open(gazetteer_path, "r", encoding="utf-8") as file:
+                places = json.load(file)
+        except (OSError, json.JSONDecodeError):
+            return jsonify({"error": "Gazetteer data unavailable"}), 500
+
+        return jsonify(places), 200
+
+    @app.get("/api/config")
+    def config():
+        return jsonify({
+            "stale_hours": 24,
+            "helpline_number": "112",
+            "emergency_numbers": [
+                {
+                    "name": "Emergency Response",
+                    "number": "112"
+                },
+                {
+                    "name": "Ambulance",
+                    "number": "108"
+                },
+                {
+                    "name": "Fire",
+                    "number": "101"
+                },
+                {
+                    "name": "Police",
+                    "number": "100"
+                }
+            ],
+            "languages": [
+                "English",
+                "Hindi",
+                "Punjabi"
+            ]
+        }), 200
 
     @app.get("/api/demands")
     def demands():
