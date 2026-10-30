@@ -631,3 +631,362 @@ def save_supplies(entries):
 
     finally:
         connection.close()
+
+
+def save_moves(recommendations):
+    """Save matching recommendations as proposed moves."""
+    connection = get_connection()
+
+    try:
+        saved_ids = []
+
+        for rec in recommendations:
+            move_id = str(uuid.uuid4())
+
+            connection.execute(
+                """
+                INSERT INTO moves (
+                    id, demand_id, stock_id, vehicle_id,
+                    item_id, qty, km, eta_h, score,
+                    trips, reason, notes, state
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed')
+                """,
+                (
+                    move_id,
+                    rec.get("demand_id"),
+                    rec.get("stock_id"),
+                    rec.get("vehicle_id"),
+                    rec.get("item_id"),
+                    rec.get("qty", 0),
+                    rec.get("km"),
+                    rec.get("eta_h"),
+                    rec.get("score"),
+                    rec.get("trips", 1),
+                    rec.get("reason"),
+                    rec.get("notes")
+                )
+            )
+
+            saved_ids.append(move_id)
+
+        connection.commit()
+        return saved_ids
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+
+def get_move(move_id):
+    """Fetch one move by its ID."""
+    connection = get_connection()
+
+    try:
+        row = connection.execute(
+            "SELECT * FROM moves WHERE id = ?",
+            (move_id,)
+        ).fetchone()
+
+        return dict(row) if row else None
+
+    finally:
+        connection.close()
+
+
+def get_moves():
+    """Fetch all moves, newest first."""
+    connection = get_connection()
+
+    try:
+        rows = connection.execute(
+            "SELECT * FROM moves ORDER BY created_at DESC"
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+
+    finally:
+        connection.close()
+
+
+def add_audit_entry(action, entity_type, entity_id,
+                    actor="system", details=None):
+    """Record an action in the audit log."""
+    connection = get_connection()
+
+    try:
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                id, action, entity_type, entity_id,
+                actor, details
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                action,
+                entity_type,
+                entity_id,
+                actor,
+                json.dumps(details or {})
+            )
+        )
+
+        connection.commit()
+
+    finally:
+        connection.close()
+
+
+def get_audit_entries(limit=100):
+    """Fetch recent audit entries."""
+    connection = get_connection()
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT * FROM audit_entries
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,)
+        ).fetchall()
+
+        entries = []
+
+        for row in rows:
+            entry = dict(row)
+            entry["details"] = json.loads(entry["details"] or "{}")
+            entries.append(entry)
+
+        return entries
+
+    finally:
+        connection.close()
+
+
+def approve_move(move_id, actor="system"):
+    """Approve a proposed move and reserve stock atomically."""
+    connection = get_connection()
+
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+
+        move = connection.execute(
+            "SELECT * FROM moves WHERE id = ?",
+            (move_id,)
+        ).fetchone()
+
+        if not move:
+            raise ValueError("Move not found.")
+
+        if move["state"] not in ("proposed", "edited"):
+            raise ValueError("Only proposed or edited moves can be approved.")
+
+        stock = connection.execute(
+            "SELECT * FROM supply_lots WHERE id = ?",
+            (move["stock_id"],)
+        ).fetchone()
+
+        if not stock:
+            raise ValueError("Associated stock lot not found.")
+
+        available = float(stock["quantity"]) - float(stock["reserved"])
+
+        if float(move["qty"]) <= 0:
+            raise ValueError("Move quantity must be greater than zero.")
+
+        if float(move["qty"]) > available:
+            raise ValueError("Insufficient available stock.")
+
+        connection.execute(
+            """
+            UPDATE supply_lots
+            SET reserved = reserved + ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (move["qty"], move["stock_id"])
+        )
+
+        connection.execute(
+            """
+            UPDATE moves
+            SET state = 'approved',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (move_id,)
+        )
+
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                id, action, entity_type, entity_id, actor, details
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                "move_approved",
+                "move",
+                move_id,
+                actor,
+                json.dumps({"reserved_quantity": move["qty"]})
+            )
+        )
+
+        connection.commit()
+
+        return get_move(move_id)
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+
+def edit_move(move_id, qty=None, notes=None, actor="system"):
+    """Edit a proposed move without changing reserved stock."""
+    connection = get_connection()
+
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+
+        move = connection.execute(
+            "SELECT * FROM moves WHERE id = ?",
+            (move_id,)
+        ).fetchone()
+
+        if not move:
+            raise ValueError("Move not found.")
+
+        if move["state"] not in ("proposed", "edited"):
+            raise ValueError("Only proposed or edited moves can be edited.")
+
+        new_qty = float(move["qty"]) if qty is None else float(qty)
+
+        if new_qty <= 0:
+            raise ValueError("Move quantity must be greater than zero.")
+
+        stock = connection.execute(
+            "SELECT * FROM supply_lots WHERE id = ?",
+            (move["stock_id"],)
+        ).fetchone()
+
+        if not stock:
+            raise ValueError("Associated stock lot not found.")
+
+        available = float(stock["quantity"]) - float(stock["reserved"])
+
+        if new_qty > available:
+            raise ValueError("Insufficient available stock.")
+
+        new_notes = move["notes"] if notes is None else notes
+
+        connection.execute(
+            """
+            UPDATE moves
+            SET qty = ?,
+                notes = ?,
+                state = 'edited',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (new_qty, new_notes, move_id)
+        )
+
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                id, action, entity_type, entity_id, actor, details
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                "move_edited",
+                "move",
+                move_id,
+                actor,
+                json.dumps({"qty": new_qty, "notes": new_notes})
+            )
+        )
+
+        connection.commit()
+
+        return get_move(move_id)
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+
+def reject_move(move_id, reason, actor="system"):
+    """Reject a proposed move and record the reason."""
+    connection = get_connection()
+
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+
+        move = connection.execute(
+            "SELECT * FROM moves WHERE id = ?",
+            (move_id,)
+        ).fetchone()
+
+        if not move:
+            raise ValueError("Move not found.")
+
+        if move["state"] not in ("proposed", "edited"):
+            raise ValueError("Only proposed or edited moves can be rejected.")
+
+        if not reason or not reason.strip():
+            raise ValueError("A rejection reason is required.")
+
+        connection.execute(
+            """
+            UPDATE moves
+            SET state = 'rejected',
+                reason = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (reason.strip(), move_id)
+        )
+
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                id, action, entity_type, entity_id, actor, details
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                "move_rejected",
+                "move",
+                move_id,
+                actor,
+                json.dumps({"reason": reason.strip()})
+            )
+        )
+
+        connection.commit()
+
+        return get_move(move_id)
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()

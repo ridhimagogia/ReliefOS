@@ -15,7 +15,15 @@ from backend.database import (
     verify_demand,
     reject_demand,
     correct_demand,
-    save_supplies
+    save_supplies,
+    save_moves,
+    get_move,
+    get_moves,
+    add_audit_entry,
+    get_audit_entries,
+    approve_move,
+    edit_move,
+    reject_move
 )
 
 from backend.extraction.chain import extract
@@ -277,6 +285,13 @@ def create_app():
             eligible_stock
         )
 
+        # Save generated recommendations as proposed moves.
+        saved_move_ids = save_moves(
+            result.get("recommendations", [])
+        )
+
+        result["saved_move_ids"] = saved_move_ids
+
         result["location_required"] = location_required
         result["excluded_demands"] = excluded_demands
 
@@ -290,6 +305,51 @@ def create_app():
             )
 
         return jsonify(result), 200
+
+
+    @app.post("/api/moves/<move_id>/approve")
+    def approve_move_route(move_id):
+        try:
+            move = approve_move(move_id)
+            return jsonify({"move": move, "state": "approved"}), 200
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+
+    @app.post("/api/moves/<move_id>/edit")
+    def edit_move_route(move_id):
+        data = request.get_json(silent=True) or {}
+
+        try:
+            move = edit_move(
+                move_id,
+                qty=data.get("qty"),
+                notes=data.get("notes")
+            )
+            return jsonify({"move": move, "state": "edited"}), 200
+        except (ValueError, TypeError) as error:
+            return jsonify({"error": str(error)}), 400
+
+    @app.post("/api/moves/<move_id>/reject")
+    def reject_move_route(move_id):
+        data = request.get_json(silent=True) or {}
+
+        try:
+            move = reject_move(
+                move_id,
+                reason=data.get("reason", "")
+            )
+            return jsonify({"move": move, "state": "rejected"}), 200
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+
+    @app.get("/api/audit")
+    def audit_route():
+        entries = get_audit_entries()
+        return jsonify(entries), 200
+
+    @app.get("/api/plan/latest")
+    def latest_plan_route():
+        return jsonify({"moves": get_moves()}), 200
 
     return app
 
