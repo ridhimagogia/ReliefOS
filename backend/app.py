@@ -372,6 +372,58 @@ def create_app():
     def latest_plan_route():
         return jsonify({"moves": get_moves()}), 200
 
+    
+    @app.get("/api/shortages")
+    def shortages_route():
+        demands_data = get_demands()
+        stock_data = get_stock()
+
+        eligible_demands = []
+
+        for demand in demands_data:
+            if not demand.get("verified") or demand.get("needs_review"):
+                continue
+
+            try:
+                lat = float(demand["lat"])
+                lng = float(demand["lng"])
+            except (TypeError, ValueError):
+                continue
+
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                continue
+
+            eligible_demands.append({
+                **demand,
+                "lat": lat,
+                "lng": lng
+            })
+
+        eligible_stock = []
+
+        for supply in stock_data:
+            try:
+                lat = float(supply["lat"])
+                lng = float(supply["lng"])
+            except (TypeError, ValueError):
+                continue
+
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                continue
+
+            eligible_stock.append({
+                **supply,
+                "lat": lat,
+                "lng": lng
+            })
+
+        result = plan(eligible_demands, eligible_stock)
+
+        return jsonify({
+            "shortages": result.get("shortages", [])
+        }), 200
+
+
     return app
 
 
