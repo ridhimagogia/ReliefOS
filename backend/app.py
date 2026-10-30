@@ -4,7 +4,7 @@ import re
 import csv
 import io
 
-from flask import Flask, jsonify, request
+from flask import Flask, app, jsonify, request
 from flask_cors import CORS
 
 from backend.database import (
@@ -49,6 +49,7 @@ def create_app():
     def demands():
         return jsonify(get_demands())
 
+    
     @app.post("/api/intake")
     def intake():
         data = request.get_json(silent=True) or {}
@@ -57,12 +58,30 @@ def create_app():
         if not isinstance(text, str) or not text.strip():
             return jsonify({"error": "Please provide a valid text report."}), 400
 
+        lat = data.get("lat")
+        lng = data.get("lng")
+
+        if (lat is None) != (lng is None):
+            return jsonify({
+                "error": "Both latitude and longitude must be provided together."
+            }), 400
+
+        if lat is not None:
+            try:
+                lat = float(lat)
+                lng = float(lng)
+            except (TypeError, ValueError):
+                return jsonify({"error": "Coordinates must be numeric."}), 400
+
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                return jsonify({"error": "Coordinates are outside valid ranges."}), 400
+
         draft = extract(text.strip())
         draft.source = "coordinator"
         draft.verified = True
         draft.needs_review = True
 
-        demand_id = save_demand(draft)
+        demand_id = save_demand(draft, lat=lat, lng=lng)
 
         demand = next(
             (item for item in get_demands() if item["id"] == demand_id),
@@ -74,6 +93,8 @@ def create_app():
             "status": "saved",
             "demand": demand
         }), 201
+
+
 
     @app.post("/api/demands/<demand_id>/verify")
     def verify(demand_id):
