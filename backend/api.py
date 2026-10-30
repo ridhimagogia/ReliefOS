@@ -595,118 +595,294 @@ def get_latest_plan():
 
 # 15. Move State Actions
 @api_bp.route("/moves/<move_id>/approve", methods=["POST"])
+@api_bp.route("/moves/<move_id>/approve", methods=["POST"])
 def approve_move(move_id):
     db = get_db()
-    move = db.query(Move).filter_by(id=move_id).first()
-    if not move:
-        return jsonify({"error": f"Move {move_id} not found"}), 404
 
-    delta = (move.edited_qty if move.edited_qty is not None else move.qty)
+    try:
+        move = db.query(Move).filter_by(id=move_id).first()
 
-    if move.state != "approved":
-        move.state = "approved"
-        # Reserve stock and fulfill demand
+        if not move:
+            return jsonify({"error": f"Move {move_id} not found"}), 404
+
+        # Prevent duplicate approval and double stock reservation
+        if move.state == "approved":
+            return jsonify({
+                "state": "approved",
+                "message": "Move is already approved"
+            }), 200
+
+        # Use edited quantity if available, otherwise original quantity
+        quantity = (
+            move.edited_qty
+            if move.edited_qty is not None
+            else move.qty
+        )
+
+        if quantity is None or quantity <= 0:
+            return jsonify({"error": "Invalid move quantity"}), 400
+
+        # Find associated stock and demand
         stock = db.query(Stock).filter_by(id=move.stock_id).first()
         demand = db.query(Demand).filter_by(id=move.demand_id).first()
-        if stock:
-            stock.reserved = (stock.reserved or 0.0) + delta
-        if demand:
-            demand.fulfilled = (demand.fulfilled or 0.0) + delta
 
+        if not stock:
+            return jsonify({"error": "Associated stock not found"}), 404
+
+        if not demand:
+            return jsonify({"error": "Associated demand not found"}), 404
+
+        # Check available stock before approving
+        available_stock = (stock.quantity or 0.0) - (stock.reserved or 0.0)
+
+        if quantity > available_stock:
+            return jsonify({
+                "error": "Insufficient available stock",
+                "available": available_stock,
+                "requested": quantity
+            }), 400
+
+        # Reserve stock and update demand fulfilment
+        stock.reserved = (stock.reserved or 0.0) + quantity
+        demand.fulfilled = (demand.fulfilled or 0.0) + quantity
+
+        # Update move state
+        move.state = "approved"
+        move.updated_at = now_iso()
+
+        # Add audit entry
         db.add(Audit(
             user="Aastha Jha (Coordinator)",
             action="approved",
             target_id=move.id,
             timestamp=now_iso(),
-            notes=f"Approved dispatch of {delta} {move.item_id}"
+            notes=f"Approved dispatch of {quantity} {move.item_id}"
         ))
+
         db.commit()
 
-    return jsonify({"state": "approved"}), 200
+        return jsonify({
+            "state": "approved",
+            "move_id": move.id,
+            "approved_quantity": quantity,
+            "message": "Move approved successfully"
+        }), 200
 
+    except Exception as e:
+        db.rollback()
+        return jsonify({
+            "error": "Failed to approve move",
+            "details": str(e)
+        }), 500
+
+@api_bp.route("/moves/<move_id>/edit", methods=["POST"])
 
 @api_bp.route("/moves/<move_id>/edit", methods=["POST"])
 def edit_move(move_id):
-    data = request.get_json(silent=True) or {}
-    new_qty = data.get("qty")
-    notes = data.get("notes") or "Edited by coordinator"
-
     db = get_db()
-    move = db.query(Move).filter_by(id=move_id).first()
-    if not move:
-        return jsonify({"error": f"Move {move_id} not found"}), 404
 
-    if new_qty is not None:
-        try:
-            qty_val = float(new_qty)
+    try:
+        data = request.get_json(silent=True) or {}
+        new_qty = data.get("qty")
+        notes = (data.get("notes") or "Edited by coordinator").strip()
+
+        move = db.query(Move).filter_by(id=move_id).first()
+
+        if not move:
+            return jsonify({"error": f"Move {move_id} not found"}), 404
+
+        old_qty = (
+            move.edited_qty
+            if move.edited_qty is not None
+            else move.qty
+        )
+
+        was_approved = move.state == "approved"
+
+        if new_qty is not None:
+            try:
+                qty_val = float(new_qty)
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid quantity"}), 400
+
             if qty_val <= 0:
-                return jsonify({"error": "Quantity must be greater than 0"}), 400
-            
-            # If already approved, adjust reserved stock delta
-            if move.state == "approved":
-                stock = db.query(Stock).filter_by(id=move.stock_id).first()
-                demand = db.query(Demand).filter_by(id=move.demand_id).first()
-                old_qty = move.edited_qty if move.edited_qty is not None else move.qty
-                diff = qty_val - old_qty
-                if stock:
-                    stock.reserved = max(0.0, (stock.reserved or 0.0) + diff)
-                if demand:
-                    demand.fulfilled = max(0.0, (demand.fulfilled or 0.0) + diff)
+                return jsonify({
+                    "error": "Quantity must be greater than 0"
+                }), 400
+
+            # Adjust reservations if the move was already approved
+            if was_approved:
+                stock = db.query(Stock).filter_by(
+                    id=move.stock_id
+                ).first()
+
+                demand = db.query(Demand).filter_by(
+                    id=move.demand_id
+                ).first()
+
+                if not stock or not demand:
+                    return jsonify({
+                        "error": "Associated stock or demand not found"
+                    }), 404
+
+                difference = qty_val - old_qty
+
+                # Check available stock when increasing quantity
+                available_stock = (
+                    (stock.quantity or 0.0) -
+                    (stock.reserved or 0.0)
+                )
+
+                if difference > available_stock:
+                    return jsonify({
+                        "error": "Insufficient available stock",
+                        "available": available_stock,
+                        "additional_requested": difference
+                    }), 400
+
+                stock.reserved = max(
+                    0.0,
+                    (stock.reserved or 0.0) + difference
+                )
+
+                demand.fulfilled = max(
+                    0.0,
+                    (demand.fulfilled or 0.0) + difference
+                )
 
             move.edited_qty = qty_val
-        except ValueError:
-            return jsonify({"error": "Invalid quantity"}), 400
 
-    move.state = "edited"
-    move.notes = notes
+        # Preserve approved state for previously approved moves
+        if not was_approved:
+            move.state = "edited"
 
-    db.add(Audit(
-        user="Aastha Jha (Coordinator)",
-        action="edited",
-        target_id=move.id,
-        timestamp=now_iso(),
-        notes=f"Edited proposal to {move.edited_qty or move.qty} units. Notes: {notes}"
-    ))
-    db.commit()
+        move.notes = notes
+        move.updated_at = now_iso()
 
-    return jsonify({"state": "edited"}), 200
+        final_qty = (
+            move.edited_qty
+            if move.edited_qty is not None
+            else move.qty
+        )
+
+        db.add(Audit(
+            user="Aastha Jha (Coordinator)",
+            action="edited",
+            target_id=move.id,
+            timestamp=now_iso(),
+            notes=f"Edited proposal to {final_qty} units. Notes: {notes}"
+        ))
+
+        db.commit()
+
+        return jsonify({
+            "state": move.state,
+            "move_id": move.id,
+            "quantity": final_qty,
+            "message": "Move updated successfully"
+        }), 200
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({
+            "error": "Failed to edit move",
+            "details": str(e)
+        }), 500
 
 
 @api_bp.route("/moves/<move_id>/reject", methods=["POST"])
+
+@api_bp.route("/moves/<move_id>/reject", methods=["POST"])
 def reject_move(move_id):
-    data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
-    if not reason:
-        return jsonify({"error": "Rejection reason is required"}), 400
-
     db = get_db()
-    move = db.query(Move).filter_by(id=move_id).first()
-    if not move:
-        return jsonify({"error": f"Move {move_id} not found"}), 404
 
-    # If was approved, rollback reserved stock and demand fulfillment
-    if move.state == "approved":
-        released_qty = move.edited_qty if move.edited_qty is not None else move.qty
-        stock = db.query(Stock).filter_by(id=move.stock_id).first()
-        demand = db.query(Demand).filter_by(id=move.demand_id).first()
-        if stock:
-            stock.reserved = max(0.0, (stock.reserved or 0.0) - released_qty)
-        if demand:
-            demand.fulfilled = max(0.0, (demand.fulfilled or 0.0) - released_qty)
+    try:
+        data = request.get_json(silent=True) or {}
+        reason = (data.get("reason") or "").strip()
 
-    move.state = "rejected"
-    move.notes = reason
+        if not reason:
+            return jsonify({
+                "error": "Rejection reason is required"
+            }), 400
 
-    db.add(Audit(
-        user="Aastha Jha (Coordinator)",
-        action="rejected",
-        target_id=move.id,
-        timestamp=now_iso(),
-        notes=reason
-    ))
-    db.commit()
+        move = db.query(Move).filter_by(id=move_id).first()
 
-    return jsonify({"state": "rejected"}), 200
+        if not move:
+            return jsonify({
+                "error": f"Move {move_id} not found"
+            }), 404
+
+        # Prevent duplicate rejection and repeated stock release
+        if move.state == "rejected":
+            return jsonify({
+                "state": "rejected",
+                "message": "Move is already rejected"
+            }), 200
+
+        # Release stock and reverse fulfilment only if previously approved
+        if move.state == "approved":
+            released_qty = (
+                move.edited_qty
+                if move.edited_qty is not None
+                else move.qty
+            )
+
+            if released_qty is None or released_qty <= 0:
+                return jsonify({
+                    "error": "Invalid move quantity"
+                }), 400
+
+            stock = db.query(Stock).filter_by(
+                id=move.stock_id
+            ).first()
+
+            demand = db.query(Demand).filter_by(
+                id=move.demand_id
+            ).first()
+
+            if not stock or not demand:
+                return jsonify({
+                    "error": "Associated stock or demand not found"
+                }), 404
+
+            stock.reserved = max(
+                0.0,
+                (stock.reserved or 0.0) - released_qty
+            )
+
+            demand.fulfilled = max(
+                0.0,
+                (demand.fulfilled or 0.0) - released_qty
+            )
+
+        # Update move state
+        move.state = "rejected"
+        move.notes = reason
+        move.updated_at = now_iso()
+
+        # Record rejection in audit log
+        db.add(Audit(
+            user="Aastha Jha (Coordinator)",
+            action="rejected",
+            target_id=move.id,
+            timestamp=now_iso(),
+            notes=reason
+        ))
+
+        db.commit()
+
+        return jsonify({
+            "state": "rejected",
+            "move_id": move.id,
+            "message": "Move rejected successfully"
+        }), 200
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({
+            "error": "Failed to reject move",
+            "details": str(e)
+        }), 500
 
 
 # 16. Audit Log
