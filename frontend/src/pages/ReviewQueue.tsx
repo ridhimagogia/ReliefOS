@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Demand } from '../types'
-import { UrgencyBadge } from '../components/UrgencyBadge'
-import { ConfidenceBar } from '../components/ConfidenceBar'
+import { UrgencyBadge, ConfidenceBar } from '../components/Badges'
 import { EmptyState } from '../components/States'
 
 const URGENCY_LABEL: Record<string, string> = {
@@ -95,7 +94,7 @@ function DemandCard({ demand, onAction }: { demand: Demand; onAction: () => void
         )}
       </div>
 
-      <ConfidenceBar confidence={demand.confidence} />
+      <ConfidenceBar value={demand.confidence} />
 
       {/* trust */}
       {demand.trust != null && (
@@ -193,7 +192,7 @@ export default function ReviewQueue() {
     if (r.ok) {
       // critical pinned first, then by created_at desc
       const queue = r.data
-        .filter((d) => d.needs_review && !d.rejected)
+        .filter((d) => d.needs_review === true)
         .sort((a, b) => {
           if (a.urgency === 'critical' && b.urgency !== 'critical') return -1
           if (b.urgency === 'critical' && a.urgency !== 'critical') return 1

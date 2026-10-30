@@ -191,6 +191,7 @@ def reject_demand(did):
     d["verified"] = False
     d["rejected"] = True
     d["reject_reason"] = reason
+    d["needs_review"] = False
     if d.get("sender_key"):
         _sender_rep[d["sender_key"]] = _sender_rep.get(d["sender_key"], 0) + 1
     _log("rejected", did, reason)
