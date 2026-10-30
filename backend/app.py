@@ -1,3 +1,4 @@
+from backend.database import init_db
 import os
 
 from flask import Flask, jsonify
@@ -8,6 +9,8 @@ from backend.offline.join import create_blueprint
 
 def create_app():
     app = Flask(__name__)
+
+    init_db()
 
     CORS(app)
 
