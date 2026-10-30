@@ -116,6 +116,15 @@ class RulesProvider(ExtractionProvider):
 
         draft.items = extracted
 
+        # Fallback: use beneficiaries when item quantity is missing
+        if draft.qty is None and draft.beneficiaries is not None:
+            draft.qty = draft.beneficiaries
+            draft.unit = "people"
+
+            if extracted:
+                extracted[0]["qty"] = draft.qty
+                extracted[0]["unit"] = draft.unit
+
         # Urgency
         draft.urgency = "medium"
 
