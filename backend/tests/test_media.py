@@ -68,3 +68,31 @@ def test_real_offline_ocr_sample(monkeypatch):
     assert result["provider"] == "tesseract"
     assert result["text"]
     assert result["needs_review"] is True
+
+
+def test_gemini_audio_transcription_success(tmp_path, monkeypatch):
+    audio = tmp_path / "sample.wav"
+    audio.write_bytes(b"fake audio data")
+
+    class FakeResponse:
+        text = "Camp 9 ko 75 kambal urgently chahiye"
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            return FakeResponse()
+
+    class FakeClient:
+        models = FakeModels()
+
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
+    monkeypatch.setattr(
+        "backend.extraction.media._gemini_client",
+        lambda: FakeClient()
+    )
+
+    result = transcribe_audio(str(audio))
+
+    assert result["transcript"] == "Camp 9 ko 75 kambal urgently chahiye"
+    assert result["provider"] == "gemini_audio"
+    assert result["needs_review"] is True
+    assert result["error"] is None
