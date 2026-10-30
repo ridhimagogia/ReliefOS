@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS audit_entries (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS sender_reputation (
+    sender_key TEXT PRIMARY KEY,
+    rejected_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_demands_urgency
 ON demands(urgency);
 
@@ -269,15 +275,14 @@ def verify_demand(demand_id, actor="coordinator"):
     finally:
         connection.close()
 
-
 def reject_demand(demand_id, reason, actor="coordinator"):
-    """Reject a demand and record the action in the audit log."""
+    """Reject a demand, update sender reputation, and record the action."""
 
     connection = get_connection()
 
     try:
         row = connection.execute(
-            "SELECT id FROM demands WHERE id = ?",
+            "SELECT id, sender_key FROM demands WHERE id = ?",
             (demand_id,)
         ).fetchone()
 
@@ -294,6 +299,23 @@ def reject_demand(demand_id, reason, actor="coordinator"):
             """,
             (demand_id,)
         )
+
+        sender_key = row["sender_key"]
+
+        if sender_key:
+            connection.execute(
+                """
+                INSERT INTO sender_reputation (
+                    sender_key, rejected_count, updated_at
+                )
+                VALUES (?, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(sender_key)
+                DO UPDATE SET
+                    rejected_count = rejected_count + 1,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (sender_key,)
+            )
 
         connection.execute(
             """
@@ -317,7 +339,6 @@ def reject_demand(demand_id, reason, actor="coordinator"):
 
     finally:
         connection.close()
-
 
 def correct_demand(demand_id, corrections, actor="coordinator"):
     """Correct demand details and record the changes."""
