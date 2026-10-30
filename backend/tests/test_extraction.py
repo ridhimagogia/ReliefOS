@@ -1,4 +1,4 @@
-﻿import os, pytest
+import os, pytest
 os.environ["OFFLINE_MODE"] = "1"
 
 from backend.extraction.chain import extract
@@ -15,6 +15,11 @@ CASES = [
     ("tent 50 camp 6 critical",                 "tent",     50,  "camp6",  "critical"),
     ("Camp 2 needs 400 pani for 800 people",    "water",   400,  "camp2",  "medium"),
     ("khana 1000 camp 15 turant",               "food",   1000,  "camp15", "high"),
+    ("Camp 17 needs drinking water for approx 600 people, urgent", "water", None, "camp17", "critical"),
+    ("Camp 4 needs 200 waterproof tents immediately for newly displaced families", "tent", 200, "camp4", "high"),
+    ("Camp 8 ke paas log beemar hain please medical kits bhejo turant", "medkit", None, "camp8", "high"),
+    ("Camp 21 paani bilkul khatam ho chuka hai 300 log hain urgent", "water", None, "camp21", "critical"),
+    ("pani 600 log camp 17",                    "water",   None, "camp17", "medium"),
 ]
 
 @pytest.mark.parametrize("text,item,qty,camp,urgency", CASES)

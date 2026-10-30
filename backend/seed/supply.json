@@ -1,0 +1,50 @@
+[
+  {
+    "location_id": "ludhiana-depot",
+    "item_id": "water",
+    "quantity": 800.0,
+    "unit": "litre"
+  },
+  {
+    "location_id": "ludhiana-depot",
+    "item_id": "food",
+    "quantity": 3000.0,
+    "unit": "packet"
+  },
+  {
+    "location_id": "ludhiana-depot",
+    "item_id": "blanket",
+    "quantity": 400.0,
+    "unit": "unit"
+  },
+  {
+    "location_id": "ludhiana-depot",
+    "item_id": "medkit",
+    "quantity": 150.0,
+    "unit": "kit"
+  },
+  {
+    "location_id": "amritsar-depot",
+    "item_id": "water",
+    "quantity": 2500.0,
+    "unit": "litre"
+  },
+  {
+    "location_id": "amritsar-depot",
+    "item_id": "tent",
+    "quantity": 150.0,
+    "unit": "unit"
+  },
+  {
+    "location_id": "jalandhar-depot",
+    "item_id": "food",
+    "quantity": 2000.0,
+    "unit": "packet"
+  },
+  {
+    "location_id": "jalandhar-depot",
+    "item_id": "medkit",
+    "quantity": 250.0,
+    "unit": "kit"
+  }
+]

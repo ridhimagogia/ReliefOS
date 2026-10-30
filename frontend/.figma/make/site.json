@@ -1,0 +1,10 @@
+{
+  "description": "A disaster-relief platform enabling coordination, resource tracking, and demand matching with real-time maps and offline report management.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

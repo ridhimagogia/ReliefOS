@@ -1,0 +1,27 @@
+[
+  {
+    "raw_text": "Camp 17 needs drinking water for approx 600 people, urgent",
+    "source": "coordinator",
+    "camp_id": "camp17"
+  },
+  {
+    "raw_text": "Camp 21 paani bilkul khatam ho chuka hai 500 log hain urgent",
+    "source": "coordinator",
+    "camp_id": "camp21"
+  },
+  {
+    "raw_text": "Camp 6 needs 450 water urgently for families",
+    "source": "coordinator",
+    "camp_id": "camp6"
+  },
+  {
+    "raw_text": "Camp 4 needs 200 waterproof tents immediately for newly displaced families",
+    "source": "coordinator",
+    "camp_id": "camp4"
+  },
+  {
+    "raw_text": "Camp 8 ke paas log beemar hain please medical kits bhejo turant",
+    "source": "public",
+    "camp_id": "camp8"
+  }
+]
