@@ -88,7 +88,7 @@ def compute_conflicts(demands: List[Dict[str, Any]],
 
         if total_needed > total_avail:
             # Conflict detected!
-            item_label = item_names.get(item_id, item_id.title())
+            item_label = item_names.get(item_id, str(item_id).title())
             competing = []
             for d in item_demands:
                 c_id = d.get("location_id") or d.get("camp_id")
@@ -182,3 +182,4 @@ def compute_stock_warnings(stock: List[Dict[str, Any]],
             pass
 
     return warnings
+
