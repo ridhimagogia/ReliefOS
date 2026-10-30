@@ -1,3 +1,7 @@
+try:
+    from extraction.dedupe import find_parent, apply_duplicate
+except ImportError:
+    from backend.extraction.dedupe import find_parent, apply_duplicate
 """
 ReliefOS Flask API  –  backend/app.py
 Run:  python app.py   (port 5000)
@@ -160,12 +164,27 @@ def gazetteer():
 def intake():
     body = request.get_json(force=True, silent=True) or {}
     text = str(body.get("text", "")).strip()
+    @app.post("/api/intake")
+def intake():
+    body = request.get_json(force=True, silent=True) or {}
+    text = str(body.get("text", "")).strip()
+
     if not text:
         return jsonify({"error": "text is required"}), 400
+
     parsed = _extract(text)
     demand = _make_demand(parsed, text)
+
+    parent = find_parent(demand, _demands)
+
+    if parent:
+        apply_duplicate(demand, parent)
+        _log("duplicate_intake", demand["id"], f"duplicate of {parent['id']}")
+    else:
+        _log("intake", demand["id"], text[:80])
+
     _demands.insert(0, demand)
-    _log("intake", demand["id"], text[:80])
+
     return jsonify({"demands": [demand]})
 
 @app.get("/api/demands")
@@ -227,9 +246,18 @@ def public_report():
         "urgency": "medium", "confidence": 0.3, "provider": "rules", "language": "en"}
     demand = _make_demand(parsed, text, source="public", verified=False,
                           sender_key=ip[:16] if ip else None)
-    demand["client_uuid"] = client_uuid
+        demand["client_uuid"] = client_uuid
+    demand["needs_review"] = True
+
+    parent = find_parent(demand, _demands)
+
+    if parent:
+        apply_duplicate(demand, parent)
+        _log("duplicate_public_report", demand["id"], f"duplicate of {parent['id']}")
+    else:
+        _log("public_report", demand["id"], text[:80])
+
     _demands.insert(0, demand)
-    _log("public_report", demand["id"], text[:80])
     return jsonify({"id": demand["id"], "status": "queued"})
 
 @app.get("/api/stock")
@@ -258,6 +286,8 @@ def match_run():
     # Simple stub: return a proposal for the first critical unverified demand
     proposals = []
     for d in _demands:
+        if d.get("duplicate_of"):
+            continue
         if d.get("urgency") == "critical" and not d.get("rejected"):
             proposals.append({
                 "id": _uid(), "demand_id": d["id"],
