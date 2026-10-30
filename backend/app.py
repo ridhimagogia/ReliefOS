@@ -6,7 +6,7 @@ import re
 import csv
 import io
 
-from flask import Flask, app, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from backend.database import (
@@ -34,6 +34,8 @@ from backend.offline.join import create_blueprint
 
 def create_app():
     app = Flask(__name__)
+    frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    app.config["FRONTEND_DIST"] = str(frontend_dist)
 
     init_db()
     CORS(app)
@@ -469,7 +471,20 @@ def create_app():
             "shortages": result.get("shortages", [])
         }), 200
 
+    @app.get("/")
+    def frontend_index():
+        return send_from_directory(app.config["FRONTEND_DIST"], "index.html")
 
+    @app.get("/<path:path>")
+    def frontend_assets(path):
+        if path.startswith("api/"):
+            return jsonify({"error": "Not found"}), 404
+
+        candidate = Path(app.config["FRONTEND_DIST"]) / path
+        if candidate.is_file():
+            return send_from_directory(app.config["FRONTEND_DIST"], path)
+
+        return send_from_directory(app.config["FRONTEND_DIST"], "index.html")
     return app
 
 
