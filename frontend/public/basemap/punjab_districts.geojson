@@ -1,0 +1,78 @@
+{
+  "type": "FeatureCollection",
+  "name": "punjab_districts",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "district": "Gurdaspur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.1, 32.2], [75.6, 32.3], [75.8, 31.8], [75.3, 31.7], [75.1, 32.2]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Amritsar", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[74.6, 31.8], [75.2, 31.8], [75.2, 31.4], [74.6, 31.4], [74.6, 31.8]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Hoshiarpur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.6, 31.8], [76.2, 31.9], [76.1, 31.3], [75.6, 31.4], [75.6, 31.8]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Jalandhar", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.2, 31.5], [75.8, 31.5], [75.8, 31.1], [75.3, 31.0], [75.2, 31.5]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Firozpur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[74.2, 31.1], [74.9, 31.1], [74.9, 30.7], [74.3, 30.6], [74.2, 31.1]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Ludhiana", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.5, 31.0], [76.2, 31.0], [76.1, 30.6], [75.4, 30.6], [75.5, 31.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Patiala", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[76.1, 30.6], [76.7, 30.5], [76.6, 30.1], [76.0, 30.1], [76.1, 30.6]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Sangrur", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.5, 30.5], [76.1, 30.5], [76.0, 30.0], [75.4, 30.0], [75.5, 30.5]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "district": "Bathinda", "state": "Punjab" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[74.6, 30.4], [75.3, 30.4], [75.2, 29.9], [74.7, 29.9], [74.6, 30.4]]]
+      }
+    }
+  ]
+}
