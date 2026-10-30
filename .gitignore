@@ -12,3 +12,5 @@ prototype/frontend/dist/
 
 reliefos_person4.zip
 *.zip
+
+instance/*.db
